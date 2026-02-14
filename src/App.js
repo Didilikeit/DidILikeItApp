@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SECURE KEYS (Vercel) ---
+// --- THE SECURE WAY ---
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://gfqmbvaierdvlfwzyzlj.supabase.co";
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_3QrJ82zuDQi8sxoWmxi0MA_mWZ98OOk";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -23,17 +23,24 @@ export default function DidILikeIt() {
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
   const [editingId, setEditingId] = useState(null);
+  
+  // Name State
+  const [displayName, setDisplayName] = useState("My");
 
   // 1. AUTH LISTENER
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setUser(session.user);
+        setDisplayName(session.user.user_metadata?.display_name || "My");
+      }
       setLoading(false);
     };
     getInitialSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) setDisplayName(session.user.user_metadata?.display_name || "My");
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -53,7 +60,22 @@ export default function DidILikeIt() {
     else alert("Sign up successful! Now try logging in.");
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setLogs([]); };
+  const handleLogout = async () => { 
+    await supabase.auth.signOut(); 
+    setUser(null); 
+    setLogs([]); 
+  };
+
+  const updateName = async () => {
+    const newName = prompt("Enter your name:", displayName === "My" ? "" : displayName);
+    if (newName !== null) {
+      const { error } = await supabase.auth.updateUser({
+        data: { display_name: newName || "My" }
+      });
+      if (!error) setDisplayName(newName || "My");
+      else alert("Error updating name");
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     if (!user) return;
@@ -98,26 +120,17 @@ export default function DidILikeIt() {
     return ["All", ...new Set(dates)];
   }, [logs]);
 
-  const filteredLogs = useMemo(() => {
-    let result = logs.filter((log) => {
-      const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
-      const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
-      
-      const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-      const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-      const matchesDate = filterDate === "All" || logMonthYear === filterDate;
-      
-      return matchesSearch && matchesMedium && matchesDate;
-    });
-
-    // PIN "READING NOW" TO TOP
-    return result.sort((a, b) => {
-      if (a.verdict === "Reading Now") return -1;
-      if (b.verdict === "Reading Now") return 1;
-      return 0;
-    });
-  }, [logs, searchTerm, filterMedium, filterDate]);
+  const filteredLogs = logs.filter((log) => {
+    const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
+    const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
+    const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
+    const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
+    const matchesDate = filterDate === "All" || logMonthYear === filterDate;
+    
+    return matchesSearch && matchesMedium && matchesDate;
+  });
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
@@ -136,10 +149,18 @@ export default function DidILikeIt() {
 
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
         <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
         <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
         <div style={{ width: "50px" }}></div>
+      </div>
+
+      {/* NAME & STATS HEADER */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '10px', marginTop: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '22px' }}>
+          {displayName}{displayName.toLowerCase() === 'my' ? '' : (displayName.endsWith('s') ? "'" : "'s")} Stats
+        </h3>
+        <button onClick={updateName} style={smallBtn}>(edit name)</button>
       </div>
 
       {/* COUNTERS BOX */}
@@ -165,18 +186,14 @@ export default function DidILikeIt() {
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
-        
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {["Reading Now", "Liked", "Kind of", "Didn't Like"].map((v) => {
-            if (v === "Reading Now" && mediaType !== "Book") return null;
-            return (
-              <button key={v} onClick={() => setVerdict(v)} style={{ ...verdictBtn, background: verdict === v ? (v === "Reading Now" ? "#3498db" : v === "Liked" ? "#4caf50" : v === "Kind of" ? "#ff9800" : "#f44336") : "#fff", color: verdict === v ? "#fff" : "#000" }}>
-                {v === "Reading Now" ? "📖 Reading Now..." : v === "Liked" ? "🟢 I liked it" : v === "Kind of" ? "🟡 It was ok" : "🔴 I didn't like it"}
-              </button>
-            );
-          })}
+          {["Liked", "Kind of", "Didn't Like"].map((v) => (
+            <button key={v} onClick={() => setVerdict(v)} style={{ ...verdictBtn, background: verdict === v ? (v === "Liked" ? "#4caf50" : v === "Kind of" ? "#ff9800" : "#f44336") : "#fff", color: verdict === v ? "#fff" : "#000" }}>
+              {v === "Liked" ? "🟢 I liked it" : v === "Kind of" ? "🟡 It was ok" : "🔴 I didn't like it"}
+            </button>
+          ))}
         </div>
-        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "LOCK IT IN"}</button>
+        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE TO LOG"}</button>
       </div>
 
       {/* FILTER CONTROLS */}
@@ -199,31 +216,18 @@ export default function DidILikeIt() {
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-          const isReading = log.verdict === "Reading Now";
-          const verb = log.media_type === "Book" ? (isReading ? "Started on" : "Read on") : (log.media_type === "Album" ? "Listened to on" : "Watched on");
-          
+          const verb = log.media_type === "Book" ? "Read on" : log.media_type === "Album" ? "Listened to on" : "Watched on";
           return (
-            <div key={log.id} style={{ 
-              padding: "20px", 
-              borderBottom: "2px solid #eee", 
-              background: isReading ? "#f0f7ff" : "transparent",
-              borderLeft: isReading ? "5px solid #3498db" : "none",
-              borderRadius: isReading ? "12px" : "0px",
-              boxShadow: isReading ? "0 4px 6px rgba(0,0,0,0.05)" : "none"
-            }}>
+            <div key={log.id} style={{ padding: "20px 0", borderBottom: "2px solid #eee" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', background: isReading ? '#3498db' : '#eee', padding: '2px 6px', borderRadius: '4px', color: isReading ? '#fff' : '#666' }}>
-                    {isReading ? "CURRENTLY READING" : log.media_type}
-                  </span>
+                  <span style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', background: '#eee', padding: '2px 6px', borderRadius: '4px', color: '#666' }}>{log.media_type}</span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} <span style={{ fontWeight: "normal", color: "#888", fontSize: '14px' }}>({log.year_released})</span></div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
                   <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>{verb} {dateLabel}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <span style={{ fontSize: "20px" }}>
-                    {log.verdict === "Reading Now" ? "📖" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
-                  </span>
+                  <span style={{ fontSize: "20px" }}>{log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴"}</span>
                   <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                     <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
                     <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
@@ -238,7 +242,7 @@ export default function DidILikeIt() {
                     e.currentTarget.style.webkitBoxOrient = "vertical";
                     e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
                   }}
-                  style={{ marginTop: "10px", padding: "12px", background: isReading ? "#fff" : "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                  style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
                 >
                   "{log.notes}"
                 </div>
