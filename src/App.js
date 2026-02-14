@@ -19,10 +19,11 @@ export default function DidILikeIt() {
   const [mediaType, setMediaType] = useState("Movie");
   const [verdict, setVerdict] = useState("");
   const [year, setYear] = useState("");
+  const [manualDate, setManualDate] = useState(""); // NEW: For retrospective logging
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
-  const [viewMode, setViewMode] = useState("History"); // Tabs: History, Reading, Queue
+  const [viewMode, setViewMode] = useState("History"); 
   const [editingId, setEditingId] = useState(null);
   const [displayName, setDisplayName] = useState("My");
 
@@ -55,7 +56,18 @@ export default function DidILikeIt() {
 
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
-    const logData = { title: title.trim(), creator: creator.trim(), notes: notes.trim(), media_type: mediaType, verdict, year_released: year || null, user_id: user.id };
+    
+    const logData = { 
+      title: title.trim(), 
+      creator: creator.trim(), 
+      notes: notes.trim(), 
+      media_type: mediaType, 
+      verdict, 
+      year_released: year || null, 
+      user_id: user.id,
+      // If a manual date is picked, use it. Otherwise, Supabase handles 'now' on insert.
+      ...(manualDate && { logged_at: new Date(manualDate).toISOString() })
+    };
     
     const { error } = editingId 
       ? await supabase.from("logs").update(logData).eq("id", editingId)
@@ -63,7 +75,8 @@ export default function DidILikeIt() {
 
     if (error) alert(`Error: ${error.message}`);
     else {
-      setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setEditingId(null);
+      setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
+      setEditingId(null);
       fetchLogs();
     }
   };
@@ -76,6 +89,8 @@ export default function DidILikeIt() {
     setEditingId(log.id); setTitle(log.title); setCreator(log.creator || "");
     setNotes(log.notes || ""); setYear(log.year_released || "");
     setVerdict(log.verdict); setMediaType(log.media_type);
+    // Format existing date for the date input (YYYY-MM-DD)
+    setManualDate(new Date(log.logged_at).toISOString().split('T')[0]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -161,11 +176,20 @@ export default function DidILikeIt() {
             <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? "#000" : "#eee", color: mediaType === t ? "#fff" : "#000", fontWeight: "bold" }}>{t}</button>
           ))}
         </div>
+        
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
+        
         <div style={{ display: "flex", gap: "10px" }}>
           <input placeholder={mediaType === "Book" ? "Author" : mediaType === "Movie" ? "Director" : "Artist"} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
+
+        {/* RETROSPECTIVE DATE PICKER */}
+        <div style={{ marginBottom: "10px" }}>
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "3px", fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
+          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginBottom: 0, padding: "8px" }} />
+        </div>
+
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -229,6 +253,9 @@ export default function DidILikeIt() {
                 <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
                 <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
                 <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
+                <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+                   {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: "20px" }}>
@@ -241,7 +268,6 @@ export default function DidILikeIt() {
               </div>
             </div>
             
-            {/* THOUGHTS WITH READ MORE TRICK */}
             {log.notes && (
               <div 
                 onClick={(e) => {
