@@ -43,19 +43,14 @@ export default function DidILikeIt() {
   const [manualDate, setManualDate] = useState(""); 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [filterDate, setFilterDate] = useState("All");
   const [viewMode, setViewMode] = useState("History"); 
   const [editingId, setEditingId] = useState(null);
   
-  const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [showAbout, setShowAbout] = useState(false); 
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const listRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Auth & Scroll listeners
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -76,7 +71,6 @@ export default function DidILikeIt() {
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
 
-  // Form expansion logic
   const adjustTextAreaHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "60px";
@@ -117,7 +111,6 @@ export default function DidILikeIt() {
     if (window.confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
   };
 
-  // Helper for media visual styles
   const getMediaStyle = (type) => {
     switch(type) {
       case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
@@ -127,33 +120,12 @@ export default function DidILikeIt() {
     }
   };
 
-  const stats = useMemo(() => {
-    const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
-    const active = logs.filter(l => l.verdict === "Currently Reading");
-    const getBreakdown = (type) => {
-      const items = logs.filter(l => l.media_type === type && !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
-      return {
-        total: items.length,
-        liked: items.filter(l => l.verdict === "Liked").length,
-        ok: items.filter(l => l.verdict === "Kind of").length,
-        no: items.filter(l => l.verdict === "Didn't Like").length
-      };
-    };
-    return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), activeCount: active.length, queueCount: logs.filter(l => queueStatuses.includes(l.verdict)).length };
-  }, [logs]);
-
-  const dateOptions = useMemo(() => {
-    const dates = logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' }));
-    return ["All", ...new Set(dates)];
-  }, [logs]);
-
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const isHistory = !isQueue && !isActive;
       const logDateObj = new Date(log.logged_at);
-      const logMonthYear = logDateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
       const fullDateStr = logDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
       const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released || ""} ${fullDateStr} ${log.verdict}`.toLowerCase();
@@ -167,10 +139,9 @@ export default function DidILikeIt() {
         else if (viewMode === "Queue") matchesView = isQueue;
         else matchesView = isHistory;
       }
-      const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
-      return matchesSearch && matchesMedium && matchesDate && matchesView;
+      return matchesSearch && matchesMedium && matchesView;
     });
-  }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
+  }, [logs, searchTerm, filterMedium, viewMode]);
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
@@ -194,32 +165,7 @@ export default function DidILikeIt() {
       {/* HEADER */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: "0 0 10px 0", fontSize: "28px" }}>🤔 Did I Like It?</h2>
-        <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
-          <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, color: "#3498db" }}>Info</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
-        </div>
-      </div>
-
-      {/* DASHBOARD STATS */}
-      <div style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
-          {["Book", "Movie", "Album"].map(type => {
-            const m = getMediaStyle(type);
-            return (
-              <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ background: '#fff', padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: '2px solid #eee', borderBottom: 'none' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color, textTransform: 'uppercase' }}>{m.icon} {type}s</div>
-                  <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
-                </div>
-                <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
-                  <div title="Liked" style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
-                  <div title="Ok" style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
-                  <div title="No" style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
       </div>
 
       {/* INPUT FORM */}
@@ -235,7 +181,11 @@ export default function DidILikeIt() {
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
         
-        {/* AUTO-EXPANDING TEXTAREA */}
+        <div style={{ marginBottom: "10px" }}>
+          <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>DATE CONSUMED</label>
+          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, padding: "8px" }} />
+        </div>
+
         <textarea 
           ref={textareaRef}
           placeholder="My thoughts..." 
@@ -245,17 +195,27 @@ export default function DidILikeIt() {
           style={{ ...inputStyle, height: "60px", minHeight: "60px", maxHeight: "350px", resize: "none", overflowY: "auto" }} 
         />
 
+        {/* RESTORED CONDITIONAL BUTTONS */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {mediaType === "Book" ? (
+            <div style={{ display: 'flex', gap: '5px' }}>
+              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : "#fff", color: verdict === "Currently Reading" ? "#fff" : "#000" }}>📖 Reading Now</button>
+              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : "#fff", color: verdict === "Want to Read" ? "#fff" : "#000" }}>🔖 Want to Read</button>
+            </div>
+          ) : (
+            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
+          )}
+          
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
+            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
+            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
+            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
       </div>
 
-      {/* TABS & SEARCH */}
+      {/* FILTER & SEARCH */}
       <div ref={listRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
@@ -266,14 +226,14 @@ export default function DidILikeIt() {
       {/* LOG LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
+          const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
+          const isActive = log.verdict === "Currently Reading";
           const m = getMediaStyle(log.media_type);
+          const verb = isActive ? "Started" : isQueue ? "Added" : (log.media_type === "Book" ? "Read" : log.media_type === "Movie" ? "Watched" : "Listened to");
+          const displayDate = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
           return (
-            <div key={log.id} style={{ 
-              padding: "15px 0 15px 15px", 
-              borderBottom: "2px solid #eee",
-              borderLeft: `5px solid ${m.color}`, 
-              borderRadius: "4px"
-            }}>
+            <div key={log.id} style={{ padding: "15px 0 15px 15px", borderBottom: "2px solid #eee", borderLeft: `5px solid ${m.color}`, borderRadius: "4px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: '10px', fontWeight: 'bold', background: m.bg, color: m.color, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${m.color}33` }}>
@@ -281,10 +241,14 @@ export default function DidILikeIt() {
                   </span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+                    {verb} on {displayDate}
+                    {log.year_released && ` • Released ${log.year_released}`}
+                  </div>
                 </div>
                 <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', paddingRight: '10px' }}>
                   <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7", color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573", border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}` }}>
-                    {log.verdict === "Liked" ? "🟢 I liked it" : log.verdict === "Kind of" ? "🟡 It was ok" : log.verdict === "Didn't Like" ? "🔴 I didn't like it" : log.verdict}
+                    {log.verdict}
                   </div>
                   <div style={{ display: "flex", gap: "10px" }}><button onClick={() => startEdit(log)} style={smallBtn}>Edit</button><button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button></div>
                 </div>
@@ -302,9 +266,8 @@ export default function DidILikeIt() {
   );
 }
 
-// STYLES
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", boxSizing: "border-box", fontSize: "14px" };
 const primaryBtn = { width: "100%", padding: "15px", background: "#000", color: "#fff", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "16px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", textAlign: "left", fontWeight: "500", fontSize: '13px' };
 const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#0070f3", padding: 0 };
-const scrollBtnStyle = { position: "fixed", bottom: "30px", right: "20px", width: "45px", height: "45px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", color: "#fff", border: "none", fontSize: "20px" };
+const scrollBtnStyle = { position: "fixed", bottom: "30px", right: "20px", width: "45px", height: "45px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", color: "#fff", border: "none", fontSize: "20px", cursor: "pointer" };
