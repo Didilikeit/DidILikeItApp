@@ -41,10 +41,15 @@ export default function DidILikeIt() {
   const [manualDate, setManualDate] = useState(""); 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [filterDate, setFilterDate] = useState("All"); // RESTORED DATE FILTER
+  const [filterDate, setFilterDate] = useState("All");
   const [viewMode, setViewMode] = useState("History"); 
   const [editingId, setEditingId] = useState(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  
+  // RESTORED ABOUT & NAME STATE
+  const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [showAbout, setShowAbout] = useState(false); 
 
   const textareaRef = useRef(null);
 
@@ -103,6 +108,30 @@ export default function DidILikeIt() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const deleteLog = async (id) => {
+    if (window.confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
+  };
+
+  const saveName = () => {
+    localStorage.setItem("user_custom_name", customName);
+    setIsEditingName(false);
+  };
+
+  const exportToCSV = () => {
+    if (logs.length === 0) return alert("Nothing to export!");
+    const headers = ["Title", "Creator", "Type", "Verdict", "Year", "Notes", "Date Logged"];
+    const rows = logs.map(log => [
+      `"${log.title}"`, `"${log.creator}"`, log.media_type, log.verdict, 
+      log.year_released || "", `"${log.notes.replace(/"/g, '""')}"`, 
+      new Date(log.logged_at).toLocaleDateString()
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = `did-i-like-it-export.csv`; link.click();
+  };
+
   const getMediaStyle = (type) => {
     switch(type) {
       case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
@@ -112,7 +141,6 @@ export default function DidILikeIt() {
     }
   };
 
-  // RESTORED STATS LOGIC
   const stats = useMemo(() => {
     const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
     const active = logs.filter(l => l.verdict === "Currently Reading");
@@ -128,7 +156,6 @@ export default function DidILikeIt() {
     return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), activeCount: active.length, queueCount: logs.filter(l => queueStatuses.includes(l.verdict)).length };
   }, [logs]);
 
-  // RESTORED DATE OPTIONS FOR DROPDOWN
   const dateOptions = useMemo(() => {
     const dates = logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' }));
     return ["All", ...new Set(dates)];
@@ -139,12 +166,11 @@ export default function DidILikeIt() {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const isHistory = !isQueue && !isActive;
-      
       const logDateObj = new Date(log.logged_at);
       const logMonthYear = logDateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
       const fullDateStr = logDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
       const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released || ""} ${fullDateStr} ${log.verdict}`.toLowerCase();
+      
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
@@ -178,25 +204,44 @@ export default function DidILikeIt() {
 
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
+      {/* HEADER & ABOUT BUTTONS */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
-        <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
+        <div style={{ display: "flex", justifyContent: "center", gap: "15px", marginTop: "10px" }}>
+          <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, color: "#3498db" }}>{showAbout ? "Close Info" : "About / Export"}</button>
+          <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
+        </div>
       </div>
 
-      {/* RESTORED STATS DASHBOARD */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '25px' }}>
-        {["Book", "Movie", "Album"].map(type => {
-          const m = getMediaStyle(type);
-          return (
-            <div key={type} style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '12px', border: '2px solid #eee' }}>
+      {/* RESTORED ABOUT SECTION */}
+      {showAbout && (
+        <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
+          <h3 style={{ marginTop: 0 }}>About</h3>
+          <p style={{ fontSize: "14px" }}>A low-pressure diary for your media gut reactions.</p>
+          <button onClick={exportToCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Export Data (.csv)</button>
+        </div>
+      )}
+
+      {/* STATS DASHBOARD & EDITABLE NAME */}
+      <div style={{ marginBottom: '25px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          {isEditingName ? (
+            <input value={customName} onChange={(e) => setCustomName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} autoFocus style={{ fontSize: '18px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none' }} />
+          ) : (
+            <><h3 style={{ margin: 0 }}>{customName ? `${customName}'s Library` : "Your Stats"}</h3><button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✏️</button></>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {["Book", "Movie", "Album"].map(type => {
+            const m = getMediaStyle(type);
+            return (
+              <div key={type} style={{ flex: 1, textAlign: 'center', background: '#fff', padding: '10px', borderRadius: '12px', border: '2px solid #eee' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {type}s</div>
                 <div style={{ fontSize: '18px', fontWeight: '800' }}>{stats[type].total}</div>
-                <div style={{ fontSize: '10px', color: '#888' }}>{stats[type].liked}👍 / {stats[type].no}👎</div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* INPUT FORM */}
@@ -214,7 +259,6 @@ export default function DidILikeIt() {
         <div style={{ marginBottom: "10px" }}><label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>DATE CONSUMED</label><input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, padding: "8px" }} /></div>
         <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} onInput={adjustTextAreaHeight} style={{ ...inputStyle, height: "60px", minHeight: "60px", maxHeight: "350px", resize: "none", overflowY: "auto" }} />
 
-        {/* RESTORED CONDITIONAL BUTTONS */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {mediaType === "Book" ? (
             <div style={{ display: 'flex', gap: '5px' }}>
@@ -233,13 +277,13 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
       </div>
 
-      {/* FILTER & SEARCH (RESTORED DATE SEARCH) */}
+      {/* FILTER & SEARCH */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
         ))}
       </div>
-      <input placeholder="🔍 Search (title, artist, or date)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px" }} />
+      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px" }} />
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={inputStyle}>
           <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
@@ -265,7 +309,10 @@ export default function DidILikeIt() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#555' }}>{log.verdict}</div>
-                  <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
+                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: 'red' }}>Delete</button>
+                  </div>
                 </div>
               </div>
               {log.notes && <ExpandableNote text={log.notes} />}
