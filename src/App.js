@@ -48,7 +48,10 @@ export default function DidILikeItUltimate() {
   const [filterDate, setFilterDate] = useState("All");
   const [viewMode, setViewMode] = useState("History"); 
   const [showAbout, setShowAbout] = useState(false);
-  const [customName] = useState(localStorage.getItem("user_custom_name") || "My Library");
+  
+  // Custom Name State
+  const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
+  const [isEditingName, setIsEditingName] = useState(false);
 
   const textareaRef = useRef(null);
   const listTopRef = useRef(null);
@@ -105,6 +108,11 @@ export default function DidILikeItUltimate() {
     }
   };
 
+  const saveName = () => {
+    localStorage.setItem("user_custom_name", customName);
+    setIsEditingName(false);
+  };
+
   const exportCSV = () => {
     const headers = ["Title", "Creator", "Type", "Verdict", "Year", "Notes", "Date"];
     const rows = logs.map(l => [`"${l.title}"`, `"${l.creator}"`, l.media_type, l.verdict, l.year_released || "", `"${l.notes.replace(/"/g, '""')}"`, new Date(l.logged_at).toLocaleDateString()]);
@@ -127,10 +135,12 @@ export default function DidILikeItUltimate() {
 
   const getVerdictStyle = (v) => {
     switch(v) {
-      case "Liked": return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9" };
-      case "Kind of": return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2" };
-      case "Didn't Like": return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2" };
-      default: return { bg: "#f0f0f0", color: "#555", border: "#ddd" };
+      case "Liked": return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
+      case "Kind of": return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
+      case "Didn't Like": return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+      case "Currently Reading": return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
+      case "Want to Read": case "Want to Watch": case "Want to Listen": return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
+      default: return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
     }
   };
 
@@ -191,7 +201,19 @@ export default function DidILikeItUltimate() {
       {/* STATS DASHBOARD */}
       <div style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <h3 style={{ margin: 0 }}>{customName}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            {isEditingName ? (
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, marginBottom: 0, padding: '4px 8px' }} placeholder="Enter Name" />
+                <button onClick={saveName} style={{ border: 'none', background: '#000', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}>✓</button>
+              </div>
+            ) : (
+              <h3 style={{ margin: 0 }}>
+                {customName ? `${customName}'s Stats` : "Your Stats"} 
+                <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', marginLeft: '8px' }}>✏️</button>
+              </h3>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
              <button onClick={() => handleStatClick("All", "Reading")} style={{ ...pillBtn, background: '#e1f5fe', color: '#01579b' }}>📖 {stats.active} Active</button>
              <button onClick={() => handleStatClick("All", "Queue")} style={{ ...pillBtn, background: '#f3e5f5', color: '#4a148c' }}>⏳ {stats.queue} Queue</button>
@@ -262,7 +284,7 @@ export default function DidILikeItUltimate() {
       </div>
       
       {/* SEARCH & DATE PICKERS */}
-      <input placeholder="🔍 Search title, creator, or thoughts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "25px", paddingLeft: "20px" }} />
+      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "25px", paddingLeft: "20px" }} />
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
         <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={inputStyle}>
             <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
@@ -280,7 +302,7 @@ export default function DidILikeItUltimate() {
           const dateStr = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
           
           return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: "2px solid #eee", background: '#fff' }}>
+            <div key={log.id} style={{ padding: "15px", borderBottom: "1px solid #eee", borderLeft: `6px solid ${m.color}`, background: '#fff' }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {log.media_type.toUpperCase()}</span>
@@ -293,7 +315,7 @@ export default function DidILikeItUltimate() {
                     fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', 
                     background: v.bg, color: v.color, border: `1px solid ${v.border}`, marginBottom: '10px', display: 'inline-block' 
                   }}>
-                    {log.verdict.toUpperCase()}
+                    {v.emoji} {log.verdict.toUpperCase()}
                   </div>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                     <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={smallBtn}>Edit</button>
@@ -314,6 +336,6 @@ export default function DidILikeItUltimate() {
 // --- REUSABLE STYLES ---
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box" };
 const primaryBtn = { width: "100%", padding: "16px", background: "#000", color: "#fff", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
-const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600", transition: "all 0.2s" };
+const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
 const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#0070f3" };
 const pillBtn = { border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '12px' };
