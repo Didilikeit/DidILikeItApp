@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SECURE VERSION ---
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "";
+// --- THE SECURE WAY ---
+// Vercel will inject these values from your "Environment Variables" settings
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function DidILikeIt() {
@@ -99,10 +101,29 @@ export default function DidILikeIt() {
   }, [logs]);
 
   const filteredLogs = logs.filter((log) => {
-    const logDate = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-    const matchesSearch = [log.title, log.creator, log.notes].join(" ").toLowerCase().includes(searchTerm.toLowerCase());
+    // This creates a readable date like "February 2026" for searching
+    const logDateFull = new Date(log.logged_at).toLocaleString('default', { 
+      month: 'long', 
+      day: 'numeric',
+      year: 'numeric' 
+    });
+    
+    // This gathers everything we want to be "searchable" into one big string
+    const searchableText = [
+      log.title, 
+      log.creator, 
+      log.notes, 
+      log.year_released, // The release year (e.g. 1994)
+      logDateFull        // The date you logged it (e.g. February)
+    ].join(" ").toLowerCase();
+
+    const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
+    
+    // These are your dropdown filters
+    const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
     const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-    const matchesDate = filterDate === "All" || logDate === filterDate;
+    const matchesDate = filterDate === "All" || logMonthYear === filterDate;
+
     return matchesSearch && matchesMedium && matchesDate;
   });
 
@@ -168,9 +189,9 @@ export default function DidILikeIt() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option>
-            <option value="Book">Books Only</option>
-            <option value="Movie">Movies Only</option>
-            <option value="Album">Albums Only</option>
+            <option value="Book">Books</option>
+            <option value="Movie">Movies</option>
+            <option value="Album">Albums</option>
           </select>
           <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
