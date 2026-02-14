@@ -284,9 +284,9 @@ export default function DidILikeIt() {
             <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
+            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
+            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
+            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
@@ -349,7 +349,7 @@ export default function DidILikeIt() {
                 </div>
                 <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', paddingRight: '10px' }}>
                   <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7", color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573", border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}` }}>
-                    {log.verdict === "Liked" ? "🟢 Liked it" : log.verdict === "Kind of" ? "🟡 It was Ok" : log.verdict === "Didn't Like" ? "🔴 No" : log.verdict}
+                    {log.verdict === "Liked" ? "🟢 Liked it" : log.verdict === "Kind of" ? "🟡 It was ok" : log.verdict === "Didn't Like" ? "🔴 No" : log.verdict}
                   </div>
                   <div style={{ display: "flex", gap: "10px" }}><button onClick={() => startEdit(log)} style={smallBtn}>Edit</button><button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button></div>
                 </div>
