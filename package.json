@@ -1,10 +1,9 @@
 {
-  "name": "react",
-  "version": "1.0.0",
-  "description": "",
-  "keywords": [],
-  "main": "src/index.tsx",
+  "name": "did-i-like-it-app",
+  "version": "0.1.0",
+  "private": true,
   "dependencies": {
+<<<<<<< HEAD
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-scripts": "^5.0.0",
@@ -15,12 +14,37 @@
     "@types/react-dom": "19.0.0",
     "loader-utils": "3.2.1",
     "typescript": "5.7.2"
+=======
+    "@supabase/supabase-js": "^2.39.7",
+    "ajv": "^8.12.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.9.5"
+>>>>>>> b322b7ac782ce8096781f6c4b16b4179d7e8e4ee
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test --env=jsdom",
+    "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
-  "browserslist": [">0.2%", "not dead", "not ie <= 11", "not op_mini all"]
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
 }
