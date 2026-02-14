@@ -134,11 +134,10 @@ export default function DidILikeItUltimate() {
   };
 
   const getVerdictStyle = (v) => {
-    // Normalizing check to catch legacy data or exact matches
-    const lowerV = v.toLowerCase();
+    const lowerV = (v || "").toLowerCase();
     if (lowerV.includes("liked")) return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
     if (lowerV.includes("ok")) return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
-    if (lowerV.includes("didn't like") || lowerV.includes("didnt like")) return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+    if (lowerV.includes("didn't like") || lowerV.includes("didnt like") || lowerV.includes("not like")) return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
     
     switch(v) {
       case "Currently Reading": return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
@@ -154,9 +153,9 @@ export default function DidILikeItUltimate() {
       const items = logs.filter(l => l.media_type === type && !queueTypes.includes(l.verdict) && l.verdict !== "Currently Reading");
       return { 
         total: items.length, 
-        liked: items.filter(l => l.verdict.toLowerCase().includes("liked")).length, 
-        ok: items.filter(l => l.verdict.toLowerCase().includes("ok")).length, 
-        no: items.filter(l => l.verdict.toLowerCase().includes("liked") === false && l.verdict.toLowerCase().includes("ok") === false).length 
+        liked: items.filter(l => (l.verdict || "").toLowerCase().includes("liked")).length, 
+        ok: items.filter(l => (l.verdict || "").toLowerCase().includes("ok")).length, 
+        no: items.filter(l => (l.verdict || "").toLowerCase().includes("didn't like") || (l.verdict || "").toLowerCase().includes("didnt like") || (l.verdict || "").toLowerCase().includes("not like")).length 
       };
     };
     return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), active: logs.filter(l => l.verdict === "Currently Reading").length, queue: logs.filter(l => queueTypes.includes(l.verdict)).length };
