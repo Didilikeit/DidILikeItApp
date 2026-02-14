@@ -6,7 +6,7 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Sub-component for individual notes to handle its own expanded state
+// Helper for Show More/Less in the history list
 const ExpandableNote = ({ text }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isLong = text.length > 120;
@@ -18,7 +18,7 @@ const ExpandableNote = ({ text }) => {
       {isLong && (
         <button 
           onClick={() => setIsExpanded(!isExpanded)} 
-          style={{ ...smallBtn, marginLeft: "8px", color: "#3498db", fontWeight: "bold", textDecoration: "underline" }}
+          style={{ background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#3498db", fontWeight: "bold", textDecoration: "underline", marginLeft: "8px" }}
         >
           {isExpanded ? "Show Less" : "Show More"}
         </button>
@@ -53,7 +53,9 @@ export default function DidILikeIt() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const listRef = useRef(null);
+  const textareaRef = useRef(null);
 
+  // Auth & Scroll listeners
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -74,6 +76,14 @@ export default function DidILikeIt() {
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
 
+  // Form expansion logic
+  const adjustTextAreaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "60px";
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+    }
+  };
+
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
     const logData = { 
@@ -87,12 +97,10 @@ export default function DidILikeIt() {
     if (error) alert(`Error: ${error.message}`);
     else {
       setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
-      setEditingId(null); fetchLogs();
+      setEditingId(null);
+      if (textareaRef.current) textareaRef.current.style.height = "60px";
+      fetchLogs();
     }
-  };
-
-  const deleteLog = async (id) => {
-    if (window.confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
   };
 
   const startEdit = (log) => {
@@ -100,32 +108,23 @@ export default function DidILikeIt() {
     setNotes(log.notes || ""); setYear(log.year_released || "");
     setVerdict(log.verdict); setMediaType(log.media_type);
     setManualDate(new Date(log.logged_at).toISOString().split('T')[0]);
+    
+    setTimeout(() => adjustTextAreaHeight(), 50);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const jumpToTab = (mode) => {
-    setViewMode(mode);
-    setTimeout(() => { listRef.current?.scrollIntoView({ behavior: "smooth" }); }, 100);
+  const deleteLog = async (id) => {
+    if (window.confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
   };
 
-  const saveName = () => {
-    localStorage.setItem("user_custom_name", customName);
-    setIsEditingName(false);
-  };
-
-  const exportToCSV = () => {
-    if (logs.length === 0) return alert("Nothing to export!");
-    const headers = ["Title", "Creator", "Type", "Verdict", "Year", "Notes", "Date Logged"];
-    const rows = logs.map(log => [
-      `"${log.title}"`, `"${log.creator}"`, log.media_type, log.verdict, 
-      log.year_released || "", `"${log.notes.replace(/"/g, '""')}"`, 
-      new Date(log.logged_at).toLocaleDateString()
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = `did-i-like-it-backup.csv`; link.click();
+  // Helper for media visual styles
+  const getMediaStyle = (type) => {
+    switch(type) {
+      case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
+      case 'Movie': return { color: '#8e44ad', bg: '#f5eef8', icon: '🎬' };
+      case 'Album': return { color: '#16a085', bg: '#e8f8f5', icon: '💿' };
+      default: return { color: '#7f8c8d', bg: '#f4f6f7', icon: '📎' };
+    }
   };
 
   const stats = useMemo(() => {
@@ -173,15 +172,6 @@ export default function DidILikeIt() {
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
 
-  const getMediaStyle = (type) => {
-    switch(type) {
-      case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
-      case 'Movie': return { color: '#8e44ad', bg: '#f5eef8', icon: '🎬' };
-      case 'Album': return { color: '#16a085', bg: '#e8f8f5', icon: '💿' };
-      default: return { color: '#7f8c8d', bg: '#f4f6f7', icon: '📎' };
-    }
-  };
-
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
   if (!user) {
@@ -201,34 +191,17 @@ export default function DidILikeIt() {
 
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
-      {/* HEADER & ABOUT omitted for brevity, but same as previous version */}
+      {/* HEADER */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: "0 0 10px 0", fontSize: "28px" }}>🤔 Did I Like It?</h2>
         <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
-          <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, fontWeight: showAbout ? 'bold' : 'normal' }}>
-            {showAbout ? "← Close Info" : "About the App"}
-          </button>
+          <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, color: "#3498db" }}>Info</button>
           <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
         </div>
       </div>
 
-      {showAbout && (
-        <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
-          <h3 style={{ marginTop: 0, color: "#2980b9" }}>What is this?</h3>
-          <p style={{ fontSize: "14px", color: "#444" }}>A low-pressure media diary focusing on your gut reactions.</p>
-          <button onClick={exportToCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Download My Data (.csv)</button>
-        </div>
-      )}
-
-      {/* STATS SECTION */}
+      {/* DASHBOARD STATS */}
       <div style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
-          {isEditingName ? (
-            <input value={customName} onChange={(e) => setCustomName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} autoFocus style={{ fontSize: '22px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none', width: '220px' }} />
-          ) : (
-            <><h3 style={{ margin: 0, fontSize: '22px' }}>{customName ? `${customName}'s Library` : "Your Stats"}</h3><button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✏️</button></>
-          )}
-        </div>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
           {["Book", "Movie", "Album"].map(type => {
             const m = getMediaStyle(type);
@@ -247,14 +220,6 @@ export default function DidILikeIt() {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading</span><span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.activeCount}</span>
-          </div>
-          <div onClick={() => jumpToTab("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 Queue</span><span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.queueCount}</span>
-          </div>
-        </div>
       </div>
 
       {/* INPUT FORM */}
@@ -266,58 +231,42 @@ export default function DidILikeIt() {
         </div>
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
         <div style={{ display: "flex", gap: "10px" }}>
-          <input placeholder={mediaType === "Book" ? "Author" : mediaType === "Movie" ? "Director" : "Artist"} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
+          <input placeholder="Creator" value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>Date Consumed</label>
-          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, padding: "8px" }} />
-        </div>
-        <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
+        
+        {/* AUTO-EXPANDING TEXTAREA */}
+        <textarea 
+          ref={textareaRef}
+          placeholder="My thoughts..." 
+          value={notes} 
+          onChange={(e) => setNotes(e.target.value)} 
+          onInput={adjustTextAreaHeight}
+          style={{ ...inputStyle, height: "60px", minHeight: "60px", maxHeight: "350px", resize: "none", overflowY: "auto" }} 
+        />
+
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {mediaType === "Book" ? (
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : "#fff", color: verdict === "Currently Reading" ? "#fff" : "#000" }}>📖 Reading Now</button>
-              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : "#fff", color: verdict === "Want to Read" ? "#fff" : "#000" }}>🔖 Want to Read</button>
-            </div>
-          ) : (
-            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
-          )}
           <div style={{ display: 'flex', gap: '5px' }}>
             <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
             <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
             <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
           </div>
         </div>
-        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
+        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
       </div>
 
-      {/* FILTER & SEARCH */}
+      {/* TABS & SEARCH */}
       <div ref={listRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
         ))}
       </div>
-      <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-            <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
-          </select>
-          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-             {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-          </select>
-        </div>
-      </div>
+      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '20px' }} />
 
-      {/* LOG ENTRIES */}
+      {/* LOG LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
-          const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
-          const isActive = log.verdict === "Currently Reading";
           const m = getMediaStyle(log.media_type);
-          let verb = isActive ? "Started" : isQueue ? "Added" : (log.media_type === "Book" ? "Read" : log.media_type === "Movie" ? "Watched" : "Listened to");
-          
           return (
             <div key={log.id} style={{ 
               padding: "15px 0 15px 15px", 
@@ -332,10 +281,6 @@ export default function DidILikeIt() {
                   </span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                    {verb} on {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {log.year_released && ` • Released ${log.year_released}`}
-                  </div>
                 </div>
                 <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', paddingRight: '10px' }}>
                   <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7", color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573", border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}` }}>
@@ -351,13 +296,15 @@ export default function DidILikeIt() {
       </div>
 
       {showScrollBtn && (
-        <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ position: "fixed", bottom: "30px", right: "20px", width: "45px", height: "45px", borderRadius: "50%", background: "rgba(0, 0, 0, 0.7)", color: "#fff", border: "none", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 1000 }}>↑</button>
+        <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={scrollBtnStyle}>↑</button>
       )}
     </div>
   );
 }
 
+// STYLES
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", boxSizing: "border-box", fontSize: "14px" };
 const primaryBtn = { width: "100%", padding: "15px", background: "#000", color: "#fff", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "16px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", textAlign: "left", fontWeight: "500", fontSize: '13px' };
 const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#0070f3", padding: 0 };
+const scrollBtnStyle = { position: "fixed", bottom: "30px", right: "20px", width: "45px", height: "45px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", color: "#fff", border: "none", fontSize: "20px" };
