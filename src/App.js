@@ -26,8 +26,7 @@ export default function DidILikeIt() {
   const [viewMode, setViewMode] = useState("History"); 
   const [editingId, setEditingId] = useState(null);
   
-  // Name Editing State
-  const [displayName, setDisplayName] = useState(localStorage.getItem("user_name") || "My");
+  const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
   const [isEditingName, setIsEditingName] = useState(false);
 
   // 1. AUTH LISTENER
@@ -52,13 +51,8 @@ export default function DidILikeIt() {
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
     const logData = { 
-      title: title.trim(), 
-      creator: creator.trim(), 
-      notes: notes.trim(), 
-      media_type: mediaType, 
-      verdict, 
-      year_released: year || null, 
-      user_id: user.id,
+      title: title.trim(), creator: creator.trim(), notes: notes.trim(), 
+      media_type: mediaType, verdict, year_released: year || null, user_id: user.id,
       ...(manualDate && { logged_at: new Date(manualDate).toISOString() })
     };
     const { error } = editingId 
@@ -84,7 +78,7 @@ export default function DidILikeIt() {
   };
 
   const saveName = () => {
-    localStorage.setItem("user_name", displayName);
+    localStorage.setItem("user_custom_name", customName);
     setIsEditingName(false);
   };
 
@@ -122,13 +116,19 @@ export default function DidILikeIt() {
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
 
+      // GLOBAL SEARCH LOGIC: If user is searching, ignore tab filter.
       let matchesView = false;
-      if (searchTerm.length > 0) matchesView = true;
-      else if (viewMode === "Reading") matchesView = isActive;
-      else if (viewMode === "Queue") matchesView = isQueue;
-      else matchesView = isHistory;
+      if (searchTerm.length > 0) {
+        matchesView = true; 
+      } else {
+        if (viewMode === "Reading") matchesView = isActive;
+        else if (viewMode === "Queue") matchesView = isQueue;
+        else matchesView = isHistory;
+      }
 
+      // Date filter only applies to History items
       const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
+      
       return matchesSearch && matchesMedium && matchesDate && matchesView;
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
@@ -158,26 +158,18 @@ export default function DidILikeIt() {
         <div style={{ width: "50px" }}></div>
       </div>
 
-      {/* STATS SECTION */}
+      {/* STATS */}
       <div style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           {isEditingName ? (
-            <input 
-              value={displayName} 
-              onChange={(e) => setDisplayName(e.target.value)} 
-              onBlur={saveName}
-              onKeyDown={(e) => e.key === 'Enter' && saveName()}
-              autoFocus
-              style={{ fontSize: '22px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none', width: '200px' }}
-            />
+            <input value={customName} placeholder="Enter name..." onChange={(e) => setCustomName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} autoFocus style={{ fontSize: '22px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none', width: '220px' }} />
           ) : (
             <>
-              <h3 style={{ margin: 0, fontSize: '22px' }}>{displayName}'s Library</h3>
+              <h3 style={{ margin: 0, fontSize: '22px' }}>{customName ? `${customName}'s Library` : "Your Stats"}</h3>
               <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>✏️</button>
             </>
           )}
         </div>
-        
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
           {[{ l: 'Books', c: stats.books }, { l: 'Movies', c: stats.movies }, { l: 'Albums', c: stats.albums }].map(i => (
             <div key={i.l} style={{ flex: 1, background: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '2px solid #eee' }}>
@@ -187,18 +179,18 @@ export default function DidILikeIt() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <div onClick={() => setViewMode("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid #f9e79f' }}>
+          <div onClick={() => setViewMode("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading Now</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.activeCount}</span>
           </div>
-          <div onClick={() => setViewMode("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid #d5dbdb' }}>
+          <div onClick={() => setViewMode("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 In Queue</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.queueCount}</span>
           </div>
         </div>
       </div>
 
-      {/* INPUT FORM */}
+      {/* FORM */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
@@ -233,7 +225,7 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
       </div>
 
-      {/* SEARCH & TABS */}
+      {/* TABS & SEARCH (Restored Filter Date) */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
@@ -241,17 +233,15 @@ export default function DidILikeIt() {
       </div>
 
       <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <input placeholder="🔍 Global search (all tabs)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option>
             <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
           </select>
-          {viewMode === "History" && (
-            <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-              {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-            </select>
-          )}
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
+             {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
+          </select>
         </div>
       </div>
 
@@ -268,7 +258,7 @@ export default function DidILikeIt() {
                   <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{verb} {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{verb} {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{ fontSize: "20px" }}>{log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}</span>
