@@ -87,8 +87,8 @@ export default function DidILikeIt() {
 
   // 3. COUNTERS & FILTER LOGIC
   const counts = useMemo(() => ({
-    Movie: logs.filter(l => l.media_type === 'Movie').length,
     Book: logs.filter(l => l.media_type === 'Book').length,
+    Movie: logs.filter(l => l.media_type === 'Movie').length,
     Album: logs.filter(l => l.media_type === 'Album').length,
   }), [logs]);
 
