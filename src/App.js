@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SECURE KEYS (Vercel) ---
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://gfqmbvaierdvlfwzyzlj.supabase.co";
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_3QrJ82zuDQi8sxoWmxi0MA_mWZ98OOk";
+// --- SECURE CONFIGURATION ---
+// These will be pulled from your Vercel Environment Variables automatically.
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function DidILikeIt() {
@@ -93,21 +94,16 @@ export default function DidILikeIt() {
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const isQueueItem = log.verdict === "Reading Now" || log.verdict.startsWith("Want to");
-      
-      // Filter by Search Term
       const searchableText = [log.title, log.creator, log.notes].join(" ").toLowerCase();
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-      
-      // Filter by Medium
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       
-      // Filter by View Mode (History vs Queue)
-      const matchesView = viewMode === "Queue" ? isQueueItem : !isQueueItem;
+      // If searching, ignore viewMode. Otherwise, filter by tab.
+      const matchesView = searchTerm.length > 0 ? true : (viewMode === "Queue" ? isQueueItem : !isQueueItem);
       
       return matchesSearch && matchesMedium && matchesView;
     }).sort((a, b) => {
-        // In Queue, keep "Reading Now" at the very top
-        if (viewMode === "Queue") {
+        if (viewMode === "Queue" && searchTerm.length === 0) {
             if (a.verdict === "Reading Now") return -1;
             if (b.verdict === "Reading Now") return 1;
         }
@@ -138,7 +134,6 @@ export default function DidILikeIt() {
         <div style={{ width: "50px" }}></div>
       </div>
 
-      {/* COUNTERS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         {Object.entries(counts).map(([type, count]) => (
           <div key={type} style={{ flex: 1, background: '#f0f0f0', padding: '10px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ddd' }}>
@@ -148,7 +143,6 @@ export default function DidILikeIt() {
         ))}
       </div>
 
-      {/* INPUT FORM */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
@@ -189,24 +183,24 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "LOCK IT IN"}</button>
       </div>
 
-      {/* VIEW TOGGLE */}
-      <div style={{ display: 'flex', marginBottom: '20px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
-        <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent", boxShadow: viewMode === "History" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>History</button>
-        <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent", boxShadow: viewMode === "Queue" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>My Queue</button>
-      </div>
+      {searchTerm.length === 0 && (
+        <div style={{ display: 'flex', marginBottom: '20px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
+          <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent", boxShadow: viewMode === "History" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>History</button>
+          <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent", boxShadow: viewMode === "Queue" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>My Queue</button>
+        </div>
+      )}
 
-      {/* SEARCH & FILTER */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
-        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: 0, flex: 2 }} />
+        <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: 0, flex: 2 }} />
         <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
           <option value="All">All Types</option>
           <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
         </select>
       </div>
 
-      {/* LOG ENTRIES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Nothing to show here yet!</div>}
+        {searchTerm.length > 0 && <div style={{ fontSize: '11px', color: '#888', marginBottom: '5px' }}>Searching across all tabs...</div>}
+        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Nothing found.</div>}
         {filteredLogs.map((log) => {
           const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
           const isReading = log.verdict === "Reading Now";
@@ -217,11 +211,11 @@ export default function DidILikeIt() {
               padding: "15px", borderBottom: "2px solid #eee", 
               background: isReading ? "#f0f7ff" : (isQueue ? "#fff" : "transparent"),
               borderLeft: isReading ? "5px solid #3498db" : (isQueue ? "5px solid #9b59b6" : "none"),
-              borderRadius: (isReading || isQueue) ? "12px" : "0px",
-              boxShadow: (isReading || isQueue) ? "0 2px 8px rgba(0,0,0,0.05)" : "none"
+              borderRadius: (isReading || isQueue) ? "12px" : "0px"
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: '#999' }}>{log.media_type}</span>
                   <div style={{ fontSize: "17px", fontWeight: "bold" }}>{log.title}</div>
                   <div style={{ color: "#666", fontSize: '14px' }}>{log.creator}</div>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{isQueue ? "Added" : "Logged"} {dateLabel}</div>
