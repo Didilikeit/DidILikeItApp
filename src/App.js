@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SECURE CONFIGURATION (Keys removed) ---
+// --- SECURE CONFIGURATION ---
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -45,34 +45,6 @@ export default function DidILikeIt() {
   }, []);
 
   // 2. ACTIONS
-  const handleLogin = async () => {
-    if (!email || !password) return alert("Enter email and password!");
-    setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { alert(error.message); setLoading(false); }
-    else { setUser(data.user); setLoading(false); }
-  };
-
-  const handleSignUp = async () => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) alert(error.message);
-    else alert("Sign up successful! Now try logging in.");
-  };
-
-  const handleLogout = async () => { 
-    await supabase.auth.signOut(); 
-    setUser(null); 
-    setLogs([]); 
-  };
-
-  const updateName = async () => {
-    const newName = prompt("Enter your name:", displayName === "My" ? "" : displayName);
-    if (newName !== null) {
-      const { error } = await supabase.auth.updateUser({ data: { display_name: newName || "My" } });
-      if (!error) setDisplayName(newName || "My");
-    }
-  };
-
   const fetchLogs = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
@@ -102,17 +74,17 @@ export default function DidILikeIt() {
   };
 
   // 3. LOGIC & FILTERING
-  const counts = useMemo(() => {
-    const historyStatuses = ["Liked", "Kind of", "Didn't Like"];
-    return {
-      Book: logs.filter(l => l.media_type === 'Book' && historyStatuses.includes(l.verdict)).length,
-      Album: logs.filter(l => l.media_type === 'Album' && historyStatuses.includes(l.verdict)).length,
-      Movie: logs.filter(l => l.media_type === 'Movie' && historyStatuses.includes(l.verdict)).length,
-    };
-  }, [logs]);
+  const queueStatuses = ["Want to Read", "Currently Reading", "Want to Watch", "Want to Listen"];
+
+  const counts = useMemo(() => ({
+    Book: logs.filter(l => l.media_type === 'Book' && !queueStatuses.includes(l.verdict)).length,
+    Album: logs.filter(l => l.media_type === 'Album' && !queueStatuses.includes(l.verdict)).length,
+    Movie: logs.filter(l => l.media_type === 'Movie' && !queueStatuses.includes(l.verdict)).length,
+  }), [logs]);
 
   const dateOptions = useMemo(() => {
-    const dates = logs.map(l => {
+    const historyLogs = logs.filter(l => !queueStatuses.includes(l.verdict));
+    const dates = historyLogs.map(l => {
       const d = new Date(l.logged_at);
       return d.toLocaleString('default', { month: 'long', year: 'numeric' });
     });
@@ -120,17 +92,20 @@ export default function DidILikeIt() {
   }, [logs]);
 
   const filteredLogs = logs.filter((log) => {
-    const queueStatuses = ["Want to Read", "Currently Reading", "Want to Watch", "Want to Listen"];
     const isQueueItem = queueStatuses.includes(log.verdict);
-    
-    const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
     const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
     
-    const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
+    // Search Check
+    const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released}`.toLowerCase();
     const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-    const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-    const matchesDate = filterDate === "All" || logMonthYear === filterDate;
     
+    // Medium Check
+    const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
+    
+    // Date Check (Queue items bypass this so they don't disappear)
+    const matchesDate = isQueueItem || filterDate === "All" || logMonthYear === filterDate;
+    
+    // View Tab Check
     const matchesView = searchTerm.length > 0 ? true : (viewMode === "Queue" ? isQueueItem : !isQueueItem);
     
     return matchesSearch && matchesMedium && matchesDate && matchesView;
@@ -145,8 +120,10 @@ export default function DidILikeIt() {
         <h2>Did I Like It?</h2>
         <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
         <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-        <button onClick={handleLogin} style={primaryBtn}>Login</button>
-        <button onClick={handleSignUp} style={{ ...primaryBtn, background: "#eee", color: "#000", marginTop: "10px" }}>Create Account</button>
+        <button onClick={async () => {
+           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+           if (error) alert(error.message); else setUser(data.user);
+        }} style={primaryBtn}>Login</button>
       </div>
     );
   }
@@ -154,17 +131,12 @@ export default function DidILikeIt() {
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-        <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
+        <button onClick={() => supabase.auth.signOut()} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
         <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
         <div style={{ width: "50px" }}></div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '10px', marginTop: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '22px' }}>
-          {displayName}{displayName.toLowerCase() === 'my' ? '' : (displayName.endsWith('s') ? "'" : "'s")} Stats
-        </h3>
-        <button onClick={updateName} style={smallBtn}>(edit name)</button>
-      </div>
+      <h3 style={{ margin: "10px 0", fontSize: '22px' }}>{displayName}'s Stats</h3>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         {Object.entries(counts).map(([type, count]) => (
@@ -190,7 +162,6 @@ export default function DidILikeIt() {
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* QUEUE OPTIONS */}
           {mediaType === "Book" ? (
             <div style={{ display: 'flex', gap: '5px' }}>
               <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : "#fff", color: verdict === "Currently Reading" ? "#fff" : "#000" }}>📖 Reading Now</button>
@@ -205,7 +176,6 @@ export default function DidILikeIt() {
             </button>
           )}
 
-          {/* HISTORY OPTIONS */}
           <div style={{ display: 'flex', gap: '5px' }}>
             <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
             <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
@@ -215,60 +185,51 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE TO LOG"}</button>
       </div>
 
+      {/* TABS */}
       <div style={{ display: 'flex', marginBottom: '15px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
         <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent" }}>History</button>
         <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent" }}>My Queue</button>
       </div>
 
+      {/* FILTERS */}
       <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option>
             <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
           </select>
-          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-            {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-          </select>
+          {viewMode === "History" && (
+            <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
+              {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
+      {/* LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        {filteredLogs.map((log) => {
-          const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-          const isQueue = ["Want to Read", "Currently Reading", "Want to Watch", "Want to Listen"].includes(log.verdict);
-          const verb = log.media_type === "Book" ? (isQueue ? "Added on" : "Read on") : log.media_type === "Album" ? (isQueue ? "Interested on" : "Listened to on") : (isQueue ? "Added on" : "Watched on");
-          
-          return (
-            <div key={log.id} style={{ padding: "20px 0", borderBottom: "2px solid #eee" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', background: '#eee', padding: '2px 6px', borderRadius: '4px', color: '#666' }}>{log.media_type}</span>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} <span style={{ fontWeight: "normal", color: "#888", fontSize: '14px' }}>({log.year_released})</span></div>
-                  <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>{verb} {dateLabel}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ fontSize: "20px" }}>
-                    {log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
-                  </span>
-                  <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                    <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
-                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
-                  </div>
+        {filteredLogs.map((log) => (
+          <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
+                <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} ({log.year_released})</div>
+                <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: "20px" }}>
+                   {log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
+                </span>
+                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                  <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
+                  <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
                 </div>
               </div>
-              {log.notes && (
-                <div 
-                  style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
-                  onClick={(e) => e.currentTarget.style.webkitLineClamp = e.currentTarget.style.webkitLineClamp === 'unset' ? '3' : 'unset'}
-                >
-                  "{log.notes}"
-                </div>
-              )}
             </div>
-          );
-        })}
+            {log.notes && <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
+          </div>
+        ))}
       </div>
     </div>
   );
