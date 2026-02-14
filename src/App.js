@@ -126,10 +126,10 @@ export default function DidILikeItUltimate() {
   // --- STYLING HELPERS ---
   const getMediaStyle = (type) => {
     switch(type) {
-      case 'Book': return { color: '#2980b9', icon: '📖' };
-      case 'Movie': return { color: '#8e44ad', icon: '🎬' };
-      case 'Album': return { color: '#16a085', icon: '💿' };
-      default: return { color: '#7f8c8d', icon: '📎' };
+      case 'Book': return { color: '#2980b9', icon: '📖', creatorLabel: 'Author' };
+      case 'Movie': return { color: '#8e44ad', icon: '🎬', creatorLabel: 'Director' };
+      case 'Album': return { color: '#16a085', icon: '💿', creatorLabel: 'Artist/Band' };
+      default: return { color: '#7f8c8d', icon: '📎', creatorLabel: 'Creator' };
     }
   };
 
@@ -249,7 +249,7 @@ export default function DidILikeItUltimate() {
         </div>
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
         <div style={{ display: "flex", gap: "10px" }}>
-          <input placeholder="Creator" value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
+          <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
         <div style={{ marginBottom: "10px" }}>
@@ -265,7 +265,7 @@ export default function DidILikeItUltimate() {
               <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : "#fff", color: verdict === "Want to Read" ? "#fff" : "#000" }}>🔖 Want to Read</button>
             </div>
           ) : (
-            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : "#fff", color: verdict.includes("Want") ? "#fff" : "#000" }}>⏳ Queue {mediaType}</button>
+            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : "#fff", color: verdict.includes("Want") ? "#fff" : "#000" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
             <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
@@ -302,13 +302,13 @@ export default function DidILikeItUltimate() {
           const dateStr = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
           
           return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: "1px solid #eee", borderLeft: `6px solid ${m.color}`, background: '#fff' }}>
+            <div key={log.id} style={{ padding: "15px", borderBottom: "2px solid #eee", borderLeft: `6px solid ${m.color}`, background: '#fff' }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {log.media_type.toUpperCase()}</span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", margin: "4px 0" }}>{log.title}</div>
                   <div style={{ fontSize: "14px", color: "#666" }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{dateStr} {log.year_released && `• ${log.year_released}`}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{dateStr} {log.year_released && `• (${log.year_released})`}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ 
