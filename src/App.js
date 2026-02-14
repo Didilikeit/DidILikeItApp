@@ -22,7 +22,7 @@ export default function DidILikeIt() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
-  const [viewMode, setViewMode] = useState("History"); 
+  const [viewMode, setViewMode] = useState("History"); // Tabs: History, Reading, Queue
   const [editingId, setEditingId] = useState(null);
   const [displayName, setDisplayName] = useState("My");
 
@@ -55,11 +55,17 @@ export default function DidILikeIt() {
 
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
-    const logData = { title, creator, notes, media_type: mediaType, verdict, year_released: year || null, user_id: user.id };
-    if (editingId) { await supabase.from("logs").update(logData).eq("id", editingId); }
-    else { await supabase.from("logs").insert([logData]); }
-    setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setEditingId(null);
-    fetchLogs();
+    const logData = { title: title.trim(), creator: creator.trim(), notes: notes.trim(), media_type: mediaType, verdict, year_released: year || null, user_id: user.id };
+    
+    const { error } = editingId 
+      ? await supabase.from("logs").update(logData).eq("id", editingId)
+      : await supabase.from("logs").insert([logData]);
+
+    if (error) alert(`Error: ${error.message}`);
+    else {
+      setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setEditingId(null);
+      fetchLogs();
+    }
   };
 
   const deleteLog = async (id) => {
@@ -74,17 +80,17 @@ export default function DidILikeIt() {
   };
 
   // 3. LOGIC & FILTERING
-  const queueStatuses = ["Want to Read", "Currently Reading", "Want to Watch", "Want to Listen"];
-
-  const counts = useMemo(() => ({
-    Book: logs.filter(l => l.media_type === 'Book' && !queueStatuses.includes(l.verdict)).length,
-    Album: logs.filter(l => l.media_type === 'Album' && !queueStatuses.includes(l.verdict)).length,
-    Movie: logs.filter(l => l.media_type === 'Movie' && !queueStatuses.includes(l.verdict)).length,
-  }), [logs]);
+  const counts = useMemo(() => {
+    const historyStatuses = ["Liked", "Kind of", "Didn't Like"];
+    return {
+      Book: logs.filter(l => l.media_type === 'Book' && historyStatuses.includes(l.verdict)).length,
+      Album: logs.filter(l => l.media_type === 'Album' && historyStatuses.includes(l.verdict)).length,
+      Movie: logs.filter(l => l.media_type === 'Movie' && historyStatuses.includes(l.verdict)).length,
+    };
+  }, [logs]);
 
   const dateOptions = useMemo(() => {
-    const historyLogs = logs.filter(l => !queueStatuses.includes(l.verdict));
-    const dates = historyLogs.map(l => {
+    const dates = logs.map(l => {
       const d = new Date(l.logged_at);
       return d.toLocaleString('default', { month: 'long', year: 'numeric' });
     });
@@ -92,21 +98,22 @@ export default function DidILikeIt() {
   }, [logs]);
 
   const filteredLogs = logs.filter((log) => {
-    const isQueueItem = queueStatuses.includes(log.verdict);
+    const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
+    const isActive = log.verdict === "Currently Reading";
+    const isHistory = !isQueue && !isActive;
+
     const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-    
-    // Search Check
-    const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released}`.toLowerCase();
+    const searchableText = `${log.title} ${log.creator} ${log.notes}`.toLowerCase();
     const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-    
-    // Medium Check
     const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-    
-    // Date Check (Queue items bypass this so they don't disappear)
-    const matchesDate = isQueueItem || filterDate === "All" || logMonthYear === filterDate;
-    
-    // View Tab Check
-    const matchesView = searchTerm.length > 0 ? true : (viewMode === "Queue" ? isQueueItem : !isQueueItem);
+
+    let matchesView = false;
+    if (searchTerm.length > 0) matchesView = true;
+    else if (viewMode === "Reading") matchesView = isActive;
+    else if (viewMode === "Queue") matchesView = isQueue;
+    else matchesView = isHistory;
+
+    const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
     
     return matchesSearch && matchesMedium && matchesDate && matchesView;
   });
@@ -185,10 +192,16 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE TO LOG"}</button>
       </div>
 
-      {/* TABS */}
-      <div style={{ display: 'flex', marginBottom: '15px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
-        <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent" }}>History</button>
-        <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent" }}>My Queue</button>
+      {/* THREE-TAB NAVIGATION */}
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
+        {["History", "Reading", "Queue"].map((tab) => (
+          <button 
+            key={tab}
+            onClick={() => setViewMode(tab)} 
+            style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent", boxShadow: viewMode === tab ? "0 2px 5px rgba(0,0,0,0.1)" : "none" }}>
+            {tab === "Queue" ? "My Queue" : tab}
+          </button>
+        ))}
       </div>
 
       {/* FILTERS */}
@@ -212,9 +225,9 @@ export default function DidILikeIt() {
         {filteredLogs.map((log) => (
           <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
-                <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} ({log.year_released})</div>
+                <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
                 <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
               </div>
               <div style={{ textAlign: "right" }}>
@@ -227,9 +240,26 @@ export default function DidILikeIt() {
                 </div>
               </div>
             </div>
-            {log.notes && <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
+            
+            {/* THOUGHTS WITH READ MORE TRICK */}
+            {log.notes && (
+              <div 
+                onClick={(e) => {
+                  const isExpanded = e.currentTarget.style.webkitLineClamp === 'unset';
+                  e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
+                }}
+                style={{ 
+                  marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", 
+                  fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer",
+                  display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" 
+                }}
+              >
+                "{log.notes}"
+              </div>
+            )}
           </div>
         ))}
+        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', color: '#999', marginTop: '20px' }}>Nothing here yet!</div>}
       </div>
     </div>
   );
