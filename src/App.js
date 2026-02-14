@@ -2,10 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // --- THE SECURE WAY ---
-// Vercel will inject these values from your "Environment Variables" settings
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
-
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://gfqmbvaierdvlfwzyzlj.supabase.co";
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_3QrJ82zuDQi8sxoWmxi0MA_mWZ98OOk";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function DidILikeIt() {
@@ -25,17 +23,24 @@ export default function DidILikeIt() {
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
   const [editingId, setEditingId] = useState(null);
+  
+  // Name State
+  const [displayName, setDisplayName] = useState("My");
 
   // 1. AUTH LISTENER
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setUser(session.user);
+        setDisplayName(session.user.user_metadata?.display_name || "My");
+      }
       setLoading(false);
     };
     getInitialSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) setDisplayName(session.user.user_metadata?.display_name || "My");
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -55,7 +60,22 @@ export default function DidILikeIt() {
     else alert("Sign up successful! Now try logging in.");
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setLogs([]); };
+  const handleLogout = async () => { 
+    await supabase.auth.signOut(); 
+    setUser(null); 
+    setLogs([]); 
+  };
+
+  const updateName = async () => {
+    const newName = prompt("Enter your name:", displayName === "My" ? "" : displayName);
+    if (newName !== null) {
+      const { error } = await supabase.auth.updateUser({
+        data: { display_name: newName || "My" }
+      });
+      if (!error) setDisplayName(newName || "My");
+      else alert("Error updating name");
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     if (!user) return;
@@ -85,11 +105,11 @@ export default function DidILikeIt() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 3. COUNTERS & FILTER LOGIC
+  // 3. LOGIC & FILTERING
   const counts = useMemo(() => ({
     Book: logs.filter(l => l.media_type === 'Book').length,
-    Movie: logs.filter(l => l.media_type === 'Movie').length,
     Album: logs.filter(l => l.media_type === 'Album').length,
+    Movie: logs.filter(l => l.media_type === 'Movie').length,
   }), [logs]);
 
   const dateOptions = useMemo(() => {
@@ -101,29 +121,14 @@ export default function DidILikeIt() {
   }, [logs]);
 
   const filteredLogs = logs.filter((log) => {
-    // This creates a readable date like "February 2026" for searching
-    const logDateFull = new Date(log.logged_at).toLocaleString('default', { 
-      month: 'long', 
-      day: 'numeric',
-      year: 'numeric' 
-    });
-    
-    // This gathers everything we want to be "searchable" into one big string
-    const searchableText = [
-      log.title, 
-      log.creator, 
-      log.notes, 
-      log.year_released, // The release year (e.g. 1994)
-      logDateFull        // The date you logged it (e.g. February)
-    ].join(" ").toLowerCase();
-
-    const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-    
-    // These are your dropdown filters
+    const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
     const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
+    const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
     const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
     const matchesDate = filterDate === "All" || logMonthYear === filterDate;
-
+    
     return matchesSearch && matchesMedium && matchesDate;
   });
 
@@ -148,6 +153,14 @@ export default function DidILikeIt() {
         <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
         <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
         <div style={{ width: "50px" }}></div>
+      </div>
+
+      {/* NAME & STATS HEADER */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '10px', marginTop: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '22px' }}>
+          {displayName}{displayName.toLowerCase() === 'my' ? '' : (displayName.endsWith('s') ? "'" : "'s")} Stats
+        </h3>
+        <button onClick={updateName} style={smallBtn}>(edit name)</button>
       </div>
 
       {/* COUNTERS BOX */}
@@ -185,7 +198,7 @@ export default function DidILikeIt() {
 
       {/* FILTER CONTROLS */}
       <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search title/notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option>
@@ -221,37 +234,20 @@ export default function DidILikeIt() {
                   </div>
                 </div>
               </div>
-{log.notes && (
-  <div 
-    onClick={(e) => {
-      // Toggle between 3 lines and full height when clicked
-      if (e.currentTarget.style.webkitLineClamp === 'unset') {
-        e.currentTarget.style.webkitLineClamp = '3';
-      } else {
-        e.currentTarget.style.webkitLineClamp = 'unset';
-      }
-    }}
-    style={{
-      marginTop: "10px",
-      padding: "12px",
-      background: "#f9f9f9",
-      borderRadius: "8px",
-      fontSize: "14px",
-      fontStyle: "italic",
-      borderLeft: "4px solid #ddd",
-      cursor: "pointer",
-      // THE MAGIC:
-      display: "-webkit-box",
-      WebkitLineClamp: "3", // Limit to 3 lines
-      WebkitBoxOrient: "vertical",
-      overflow: "hidden",
-      transition: "all 0.3s ease"
-    }}
-    title="Click to read more"
-  >
-    "{log.notes}"
-  </div>
-)}            </div>
+              {log.notes && (
+                <div 
+                  onClick={(e) => {
+                    const isExpanded = e.currentTarget.style.webkitLineClamp === 'unset';
+                    e.currentTarget.style.display = "-webkit-box";
+                    e.currentTarget.style.webkitBoxOrient = "vertical";
+                    e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
+                  }}
+                  style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                >
+                  "{log.notes}"
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
