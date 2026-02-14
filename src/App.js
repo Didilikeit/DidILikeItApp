@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // --- SECURE CONFIGURATION ---
@@ -28,6 +28,8 @@ export default function DidILikeIt() {
   
   const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
   const [isEditingName, setIsEditingName] = useState(false);
+
+  const listRef = useRef(null);
 
   // 1. AUTH LISTENER
   useEffect(() => {
@@ -77,6 +79,13 @@ export default function DidILikeIt() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const jumpToTab = (mode) => {
+    setViewMode(mode);
+    setTimeout(() => {
+      listRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  };
+
   const saveName = () => {
     localStorage.setItem("user_custom_name", customName);
     setIsEditingName(false);
@@ -116,19 +125,15 @@ export default function DidILikeIt() {
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
 
-      // GLOBAL SEARCH LOGIC: If user is searching, ignore tab filter.
       let matchesView = false;
-      if (searchTerm.length > 0) {
-        matchesView = true; 
-      } else {
+      if (searchTerm.length > 0) matchesView = true;
+      else {
         if (viewMode === "Reading") matchesView = isActive;
         else if (viewMode === "Queue") matchesView = isQueue;
         else matchesView = isHistory;
       }
 
-      // Date filter only applies to History items
       const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
-      
       return matchesSearch && matchesMedium && matchesDate && matchesView;
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
@@ -158,7 +163,7 @@ export default function DidILikeIt() {
         <div style={{ width: "50px" }}></div>
       </div>
 
-      {/* STATS */}
+      {/* STATS SECTION */}
       <div style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           {isEditingName ? (
@@ -179,18 +184,18 @@ export default function DidILikeIt() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <div onClick={() => setViewMode("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
+          <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading Now</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.activeCount}</span>
           </div>
-          <div onClick={() => setViewMode("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
+          <div onClick={() => jumpToTab("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 In Queue</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.queueCount}</span>
           </div>
         </div>
       </div>
 
-      {/* FORM */}
+      {/* FORM SECTION */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
@@ -207,6 +212,7 @@ export default function DidILikeIt() {
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginBottom: 0, padding: "8px" }} />
         </div>
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
+        
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {mediaType === "Book" ? (
             <div style={{ display: 'flex', gap: '5px' }}>
@@ -217,16 +223,16 @@ export default function DidILikeIt() {
             <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
+            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
+            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
+            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
       </div>
 
-      {/* TABS & SEARCH (Restored Filter Date) */}
-      <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
+      {/* TABS & SEARCH */}
+      <div ref={listRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
         ))}
@@ -245,29 +251,51 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* LIST */}
+      {/* LIST VIEW */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
           const isActive = log.verdict === "Currently Reading";
-          let verb = isActive ? "Started on" : isQueue ? "Added on" : (log.media_type === "Book" ? "Read on" : log.media_type === "Movie" ? "Watched on" : "Listened to on");
+          let verb = isActive ? "Started" : isQueue ? "Added" : (log.media_type === "Book" ? "Read" : log.media_type === "Movie" ? "Watched" : "Listened to");
+          
           return (
             <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{verb} {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{verb} on {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ fontSize: "20px" }}>{log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}</span>
-                  <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+
+                {/* SENTIMENT BADGE SECTION */}
+                <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                  <div style={{
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7",
+                    color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573",
+                    border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}`
+                  }}>
+                    <span>{log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}</span>
+                    {log.verdict === "Liked" && "I liked it"}
+                    {log.verdict === "Kind of" && "It was ok"}
+                    {log.verdict === "Didn't Like" && "I didn't like it"}
+                    {log.verdict === "Currently Reading" && "Currently Reading"}
+                    {isQueue && "In Queue"}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px" }}>
                     <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
                     <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
                   </div>
                 </div>
               </div>
+              
               {log.notes && (
                 <div onClick={(e) => { const isExp = e.currentTarget.style.webkitLineClamp === 'unset'; e.currentTarget.style.webkitLineClamp = isExp ? "3" : "unset"; }}
                      style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -284,5 +312,5 @@ export default function DidILikeIt() {
 
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", boxSizing: "border-box", fontSize: "14px" };
 const primaryBtn = { width: "100%", padding: "15px", background: "#000", color: "#fff", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "16px" };
-const verdictBtn = { padding: "12px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", textAlign: "left", fontWeight: "500", fontSize: '14px' };
+const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", textAlign: "left", fontWeight: "500", fontSize: '13px' };
 const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#0070f3", padding: 0 };
