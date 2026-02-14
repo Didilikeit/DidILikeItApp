@@ -202,7 +202,7 @@ export default function DidILikeIt() {
             <input value={customName} placeholder="Enter name..." onChange={(e) => setCustomName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} autoFocus style={{ fontSize: '22px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none', width: '220px' }} />
           ) : (
             <>
-              <h3 style={{ margin: 0, fontSize: '22px' }}>{customName ? `${customName}'s Library` : "Your Stats"}</h3>
+              <h3 style={{ margin: 0, fontSize: '22px' }}>{customName ? `${customName}'s Stats` : "Your Stats"}</h3>
               <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>✏️</button>
             </>
           )}
