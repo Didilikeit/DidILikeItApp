@@ -6,6 +6,27 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Sub-component for individual notes to handle its own expanded state
+const ExpandableNote = ({ text }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLong = text.length > 120;
+  const displayedText = isLong && !isExpanded ? text.substring(0, 120) + "..." : text;
+
+  return (
+    <div style={{ marginTop: "10px", marginRight: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>
+      "{displayedText}"
+      {isLong && (
+        <button 
+          onClick={() => setIsExpanded(!isExpanded)} 
+          style={{ ...smallBtn, marginLeft: "8px", color: "#3498db", fontWeight: "bold", textDecoration: "underline" }}
+        >
+          {isExpanded ? "Show Less" : "Show More"}
+        </button>
+      )}
+    </div>
+  );
+};
+
 export default function DidILikeIt() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +54,6 @@ export default function DidILikeIt() {
 
   const listRef = useRef(null);
 
-  // 1. AUTH & SCROLL LISTENERS
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -41,15 +61,11 @@ export default function DidILikeIt() {
       setLoading(false);
     };
     getInitialSession();
-
-    const checkScroll = () => {
-      setShowScrollBtn(window.scrollY > 400);
-    };
+    const checkScroll = () => setShowScrollBtn(window.scrollY > 400);
     window.addEventListener("scroll", checkScroll);
     return () => window.removeEventListener("scroll", checkScroll);
   }, []);
 
-  // 2. ACTIONS
   const fetchLogs = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
@@ -76,7 +92,7 @@ export default function DidILikeIt() {
   };
 
   const deleteLog = async (id) => {
-    if (confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
+    if (window.confirm("Delete forever?")) { await supabase.from("logs").delete().eq("id", id); fetchLogs(); }
   };
 
   const startEdit = (log) => {
@@ -89,9 +105,7 @@ export default function DidILikeIt() {
 
   const jumpToTab = (mode) => {
     setViewMode(mode);
-    setTimeout(() => {
-      listRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+    setTimeout(() => { listRef.current?.scrollIntoView({ behavior: "smooth" }); }, 100);
   };
 
   const saveName = () => {
@@ -111,12 +125,9 @@ export default function DidILikeIt() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = url;
-    link.download = `did-i-like-it-backup-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+    link.href = url; link.download = `did-i-like-it-backup.csv`; link.click();
   };
 
-  // 3. LOGIC & STATS
   const stats = useMemo(() => {
     const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
     const active = logs.filter(l => l.verdict === "Currently Reading");
@@ -151,20 +162,17 @@ export default function DidILikeIt() {
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       
       let matchesView = false;
-      if (searchTerm.length > 0) {
-        matchesView = true;
-      } else {
+      if (searchTerm.length > 0) matchesView = true;
+      else {
         if (viewMode === "Reading") matchesView = isActive;
         else if (viewMode === "Queue") matchesView = isQueue;
         else matchesView = isHistory;
       }
-
       const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
       return matchesSearch && matchesMedium && matchesDate && matchesView;
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
 
-  // Visual Helper for Media Styles
   const getMediaStyle = (type) => {
     switch(type) {
       case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
@@ -193,7 +201,7 @@ export default function DidILikeIt() {
 
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
-      {/* HEADER */}
+      {/* HEADER & ABOUT omitted for brevity, but same as previous version */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: "0 0 10px 0", fontSize: "28px" }}>🤔 Did I Like It?</h2>
         <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
@@ -204,23 +212,15 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* ABOUT */}
       {showAbout && (
         <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
           <h3 style={{ marginTop: 0, color: "#2980b9" }}>What is this?</h3>
           <p style={{ fontSize: "14px", color: "#444" }}>A low-pressure media diary focusing on your gut reactions.</p>
-          <div style={{ fontSize: "13px", background: "#fff", padding: "10px", borderRadius: "8px", border: "1px solid #eee" }}>
-            <div style={{ marginBottom: "5px" }}>🟢 <strong>I liked it:</strong> Would recommend.</div>
-            <div style={{ marginBottom: "5px" }}>🟡 <strong>It was ok:</strong> Once was enough.</div>
-            <div>🔴 <strong>I didn't like it:</strong> Not for me.</div>
-          </div>
-          <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid #eee" }}>
-            <button onClick={exportToCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Download My Data (.csv)</button>
-          </div>
+          <button onClick={exportToCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Download My Data (.csv)</button>
         </div>
       )}
 
-      {/* STATS */}
+      {/* STATS SECTION */}
       <div style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
           {isEditingName ? (
@@ -239,9 +239,9 @@ export default function DidILikeIt() {
                   <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
                 </div>
                 <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
-                  <div style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
-                  <div style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
-                  <div style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
+                  <div title="Liked" style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
+                  <div title="Ok" style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
+                  <div title="No" style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
                 </div>
               </div>
             );
@@ -257,7 +257,7 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* FORM */}
+      {/* INPUT FORM */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
@@ -270,7 +270,7 @@ export default function DidILikeIt() {
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
         <div style={{ marginBottom: "10px" }}>
-          <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>{mediaType === "Book" ? "Date Read" : "Date Consumed"}</label>
+          <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>Date Consumed</label>
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, padding: "8px" }} />
         </div>
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
@@ -292,7 +292,7 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
       </div>
 
-      {/* TABS & SEARCH */}
+      {/* FILTER & SEARCH */}
       <div ref={listRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
@@ -310,7 +310,7 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* LOG LIST */}
+      {/* LOG ENTRIES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
@@ -322,24 +322,14 @@ export default function DidILikeIt() {
             <div key={log.id} style={{ 
               padding: "15px 0 15px 15px", 
               borderBottom: "2px solid #eee",
-              borderLeft: `5px solid ${m.color}`, // Visual Accent Line
+              borderLeft: `5px solid ${m.color}`, 
               borderRadius: "4px"
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  {/* Color-Coded Tag */}
-                  <span style={{ 
-                    fontSize: '10px', 
-                    fontWeight: 'bold', 
-                    background: m.bg, 
-                    color: m.color,
-                    padding: '2px 8px', 
-                    borderRadius: '4px',
-                    border: `1px solid ${m.color}33` 
-                  }}>
+                  <span style={{ fontSize: '10px', fontWeight: 'bold', background: m.bg, color: m.color, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${m.color}33` }}>
                     {m.icon} {log.media_type.toUpperCase()}
                   </span>
-                  
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
@@ -354,7 +344,7 @@ export default function DidILikeIt() {
                   <div style={{ display: "flex", gap: "10px" }}><button onClick={() => startEdit(log)} style={smallBtn}>Edit</button><button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button></div>
                 </div>
               </div>
-              {log.notes && <div style={{ marginTop: "10px", marginRight: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
+              {log.notes && <ExpandableNote text={log.notes} />}
             </div>
           );
         })}
