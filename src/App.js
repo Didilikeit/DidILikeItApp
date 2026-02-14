@@ -28,7 +28,7 @@ export default function DidILikeIt() {
   
   const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
   const [isEditingName, setIsEditingName] = useState(false);
-  const [showAbout, setShowAbout] = useState(false); // New state for About section
+  const [showAbout, setShowAbout] = useState(false); 
 
   const listRef = useRef(null);
 
@@ -98,12 +98,17 @@ export default function DidILikeIt() {
     const completed = logs.filter(l => !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
     const active = logs.filter(l => l.verdict === "Currently Reading");
     const queue = logs.filter(l => queueStatuses.includes(l.verdict));
+    
     return {
       books: completed.filter(l => l.media_type === "Book").length,
       movies: completed.filter(l => l.media_type === "Movie").length,
       albums: completed.filter(l => l.media_type === "Album").length,
       activeCount: active.length,
-      queueCount: queue.length
+      queueCount: queue.length,
+      // Sentiment Counts
+      liked: completed.filter(l => l.verdict === "Liked").length,
+      ok: completed.filter(l => l.verdict === "Kind of").length,
+      disliked: completed.filter(l => l.verdict === "Didn't Like").length
     };
   }, [logs]);
 
@@ -159,14 +164,14 @@ export default function DidILikeIt() {
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
       {/* HEADER NAV */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-        <div style={{ display: 'flex', gap: '15px' }}>
+      <div style={{ textAlign: "center", marginBottom: "25px" }}>
+        <h2 style={{ margin: "0 0 10px 0", fontSize: "28px" }}>🤔 Did I Like It?</h2>
+        <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
           <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, fontWeight: showAbout ? 'bold' : 'normal' }}>
-            {showAbout ? "← Close" : "About"}
+            {showAbout ? "← Close Info" : "About the App"}
           </button>
           <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
         </div>
-        <h2 style={{ margin: 0 }}>🤔</h2>
       </div>
 
       {/* ABOUT SECTION */}
@@ -174,7 +179,7 @@ export default function DidILikeIt() {
         <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
           <h3 style={{ marginTop: 0, color: "#2980b9" }}>What is this?</h3>
           <p style={{ fontSize: "14px", color: "#444" }}>
-            <strong>Did I Like It?</strong> is a low-pressure media diary. It's not about being a critic; it's about your gut reaction.
+            <strong>Did I Like It?</strong> is a low-pressure media diary. It's not about being a critic; it's about your gut reaction to what you consume.
           </p>
           <div style={{ fontSize: "13px", background: "#fff", padding: "10px", borderRadius: "8px", border: "1px solid #eee" }}>
             <div style={{ marginBottom: "5px" }}>🟢 <strong>I liked it:</strong> Would revisit or recommend.</div>
@@ -197,6 +202,8 @@ export default function DidILikeIt() {
             </>
           )}
         </div>
+
+        {/* Medium Count Row */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
           {[{ l: 'Books', c: stats.books }, { l: 'Movies', c: stats.movies }, { l: 'Albums', c: stats.albums }].map(i => (
             <div key={i.l} style={{ flex: 1, background: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '2px solid #eee' }}>
@@ -205,13 +212,31 @@ export default function DidILikeIt() {
             </div>
           ))}
         </div>
+
+        {/* NEW: Sentiment Count Row */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ flex: 1, background: '#e8f5e9', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #c8e6c9' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#2e7d32', textTransform: 'uppercase' }}>Liked</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: '#1b5e20' }}>{stats.liked}</div>
+          </div>
+          <div style={{ flex: 1, background: '#fff3e0', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #ffe0b2' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#ef6c00', textTransform: 'uppercase' }}>Ok</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: '#e65100' }}>{stats.ok}</div>
+          </div>
+          <div style={{ flex: 1, background: '#ffebee', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #ffcdd2' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#c62828', textTransform: 'uppercase' }}>No</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: '#b71c1c' }}>{stats.disliked}</div>
+          </div>
+        </div>
+
+        {/* Activity Row */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading Now</span>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.activeCount}</span>
           </div>
           <div onClick={() => jumpToTab("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 In Queue</span>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 Queue</span>
             <span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.queueCount}</span>
           </div>
         </div>
