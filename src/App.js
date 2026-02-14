@@ -339,7 +339,7 @@ export default function DidILikeIt() {
                 </div>
                 <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', paddingRight: '10px' }}>
                   <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7", color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573", border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}` }}>
-                    {log.verdict === "Liked" ? "🟢 Liked it" : log.verdict === "Kind of" ? "🟡 It was ok" : log.verdict === "Didn't Like" ? "🔴 No" : log.verdict}
+                    {log.verdict === "Liked" ? "🟢 I liked it" : log.verdict === "Kind of" ? "🟡 It was ok" : log.verdict === "Didn't Like" ? "🔴 I didn't like it" : log.verdict}
                   </div>
                   <div style={{ display: "flex", gap: "10px" }}><button onClick={() => startEdit(log)} style={smallBtn}>Edit</button><button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button></div>
                 </div>
