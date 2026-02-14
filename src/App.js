@@ -95,20 +95,25 @@ export default function DidILikeIt() {
   // 3. LOGIC & STATS
   const stats = useMemo(() => {
     const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
-    const completed = logs.filter(l => !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
     const active = logs.filter(l => l.verdict === "Currently Reading");
     const queue = logs.filter(l => queueStatuses.includes(l.verdict));
     
+    const getBreakdown = (type) => {
+      const items = logs.filter(l => l.media_type === type && !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
+      return {
+        total: items.length,
+        liked: items.filter(l => l.verdict === "Liked").length,
+        ok: items.filter(l => l.verdict === "Kind of").length,
+        no: items.filter(l => l.verdict === "Didn't Like").length
+      };
+    };
+
     return {
-      books: completed.filter(l => l.media_type === "Book").length,
-      movies: completed.filter(l => l.media_type === "Movie").length,
-      albums: completed.filter(l => l.media_type === "Album").length,
+      Book: getBreakdown("Book"),
+      Movie: getBreakdown("Movie"),
+      Album: getBreakdown("Album"),
       activeCount: active.length,
-      queueCount: queue.length,
-      // Sentiment Counts
-      liked: completed.filter(l => l.verdict === "Liked").length,
-      ok: completed.filter(l => l.verdict === "Kind of").length,
-      disliked: completed.filter(l => l.verdict === "Didn't Like").length
+      queueCount: queue.length
     };
   }, [logs]);
 
@@ -192,7 +197,7 @@ export default function DidILikeIt() {
 
       {/* STATS SECTION */}
       <div style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
           {isEditingName ? (
             <input value={customName} placeholder="Enter name..." onChange={(e) => setCustomName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} autoFocus style={{ fontSize: '22px', fontWeight: 'bold', border: 'none', borderBottom: '2px solid #000', outline: 'none', width: '220px' }} />
           ) : (
@@ -203,30 +208,23 @@ export default function DidILikeIt() {
           )}
         </div>
 
-        {/* Medium Count Row */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          {[{ l: 'Books', c: stats.books }, { l: 'Movies', c: stats.movies }, { l: 'Albums', c: stats.albums }].map(i => (
-            <div key={i.l} style={{ flex: 1, background: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '2px solid #eee' }}>
-              <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>{i.l}</div>
-              <div style={{ fontSize: '20px', fontWeight: '800' }}>{i.c}</div>
+        {/* NESTED CATEGORY ROW */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+          {["Book", "Movie", "Album"].map(type => (
+            <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {/* Main Header Card */}
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: '2px solid #eee', borderBottom: 'none' }}>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>{type}s</div>
+                <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
+              </div>
+              {/* Nested Sentiment Strip */}
+              <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
+                <div title="Liked" style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
+                <div title="Ok" style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
+                <div title="Didn't Like" style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
+              </div>
             </div>
           ))}
-        </div>
-
-        {/* NEW: Sentiment Count Row */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <div style={{ flex: 1, background: '#e8f5e9', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #c8e6c9' }}>
-            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#2e7d32', textTransform: 'uppercase' }}>Liked</div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: '#1b5e20' }}>{stats.liked}</div>
-          </div>
-          <div style={{ flex: 1, background: '#fff3e0', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #ffe0b2' }}>
-            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#ef6c00', textTransform: 'uppercase' }}>Ok</div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: '#e65100' }}>{stats.ok}</div>
-          </div>
-          <div style={{ flex: 1, background: '#ffebee', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '1px solid #ffcdd2' }}>
-            <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#c62828', textTransform: 'uppercase' }}>No</div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: '#b71c1c' }}>{stats.disliked}</div>
-          </div>
         </div>
 
         {/* Activity Row */}
@@ -242,7 +240,7 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* FORM SECTION */}
+      {/* FORM SECTION (Kept the same) */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
