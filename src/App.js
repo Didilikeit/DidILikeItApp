@@ -236,9 +236,9 @@ export default function DidILikeItUltimate() {
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
-                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
-                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
+                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
+                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
+                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
                 </div>
               </div>
             );
