@@ -21,10 +21,10 @@ export default function DidILikeIt() {
   const [year, setYear] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [viewMode, setViewMode] = useState("History"); 
+  const [viewMode, setViewMode] = useState("History"); // History vs Queue
   const [editingId, setEditingId] = useState(null);
 
-  // 1. AUTH LISTENER
+  // 1. AUTH
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -38,7 +38,7 @@ export default function DidILikeIt() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. DATA ACTIONS
+  // 2. FETCH DATA
   const fetchLogs = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
@@ -47,25 +47,12 @@ export default function DidILikeIt() {
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
 
+  // 3. ACTIONS
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Status required!");
-    
-    const logData = { 
-      title, 
-      creator, 
-      notes, 
-      media_type: mediaType, 
-      verdict, 
-      year_released: year || null, 
-      user_id: user.id 
-    };
-
-    if (editingId) { 
-      await supabase.from("logs").update(logData).eq("id", editingId); 
-    } else { 
-      await supabase.from("logs").insert([logData]); 
-    }
-
+    const logData = { title, creator, notes, media_type: mediaType, verdict, year_released: year || null, user_id: user.id };
+    if (editingId) { await supabase.from("logs").update(logData).eq("id", editingId); }
+    else { await supabase.from("logs").insert([logData]); }
     setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setEditingId(null);
     fetchLogs();
   };
@@ -75,35 +62,24 @@ export default function DidILikeIt() {
   };
 
   const startEdit = (log) => {
-    setEditingId(log.id); 
-    setTitle(log.title); 
-    setCreator(log.creator || "");
-    setNotes(log.notes || ""); 
-    setYear(log.year_released || "");
-    setVerdict(log.verdict); 
-    setMediaType(log.media_type);
+    setEditingId(log.id); setTitle(log.title); setCreator(log.creator || "");
+    setNotes(log.notes || ""); setYear(log.year_released || "");
+    setVerdict(log.verdict); setMediaType(log.media_type);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 3. LOGIC & FILTERING
+  // 4. FILTER LOGIC
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
-      const queueStatuses = ["Reading Now", "Want to Watch", "Want to Listen"];
-      const isQueueItem = queueStatuses.includes(log.verdict);
-      
+      const isQueueItem = log.verdict === "Reading Now" || log.verdict === "Want to Watch" || log.verdict === "Want to Listen";
       const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released}`.toLowerCase();
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       
+      // Global search ignores tabs. Otherwise, split by History/Queue.
       const matchesView = searchTerm.length > 0 ? true : (viewMode === "Queue" ? isQueueItem : !isQueueItem);
       
       return matchesSearch && matchesMedium && matchesView;
-    }).sort((a, b) => {
-        if (viewMode === "Queue" && searchTerm.length === 0) {
-            if (a.verdict === "Reading Now") return -1;
-            if (b.verdict === "Reading Now") return 1;
-        }
-        return 0;
     });
   }, [logs, searchTerm, filterMedium, viewMode]);
 
@@ -152,16 +128,10 @@ export default function DidILikeIt() {
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* THE QUEUE BUTTON */}
-          {mediaType === "Book" && (
-            <button onClick={() => setVerdict("Reading Now")} style={{ ...verdictBtn, background: verdict === "Reading Now" ? "#3498db" : "#fff", color: verdict === "Reading Now" ? "#fff" : "#000" }}>📖 Reading Now</button>
-          )}
-          {mediaType === "Movie" && (
-            <button onClick={() => setVerdict("Want to Watch")} style={{ ...verdictBtn, background: verdict === "Want to Watch" ? "#9b59b6" : "#fff", color: verdict === "Want to Watch" ? "#fff" : "#000" }}>⏳ Want to Watch</button>
-          )}
-          {mediaType === "Album" && (
-            <button onClick={() => setVerdict("Want to Listen")} style={{ ...verdictBtn, background: verdict === "Want to Listen" ? "#e67e22" : "#fff", color: verdict === "Want to Listen" ? "#fff" : "#000" }}>🎧 Want to Listen</button>
-          )}
+          {/* Dynamic Queue Status */}
+          {mediaType === "Book" && <button onClick={() => setVerdict("Reading Now")} style={{ ...verdictBtn, background: verdict === "Reading Now" ? "#3498db" : "#fff", color: verdict === "Reading Now" ? "#fff" : "#000" }}>📖 Reading Now</button>}
+          {mediaType === "Movie" && <button onClick={() => setVerdict("Want to Watch")} style={{ ...verdictBtn, background: verdict === "Want to Watch" ? "#9b59b6" : "#fff", color: verdict === "Want to Watch" ? "#fff" : "#000" }}>⏳ Want to Watch</button>}
+          {mediaType === "Album" && <button onClick={() => setVerdict("Want to Listen")} style={{ ...verdictBtn, background: verdict === "Want to Listen" ? "#e67e22" : "#fff", color: verdict === "Want to Listen" ? "#fff" : "#000" }}>🎧 Want to Listen</button>}
 
           <div style={{ display: 'flex', gap: '5px' }}>
             <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
@@ -172,7 +142,7 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "LOCK IT IN"}</button>
       </div>
 
-      {/* TOGGLE & SEARCH */}
+      {/* VIEW TOGGLE */}
       {searchTerm.length === 0 && (
         <div style={{ display: 'flex', marginBottom: '15px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
           <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent" }}>History</button>
@@ -180,6 +150,7 @@ export default function DidILikeIt() {
         </div>
       )}
 
+      {/* SEARCH/FILTER */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
         <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", flex: 2, marginBottom: 0 }} />
         <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
@@ -188,19 +159,12 @@ export default function DidILikeIt() {
         </select>
       </div>
 
-      {/* LOG ENTRIES */}
+      {/* THE LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-          const isQueue = ["Reading Now", "Want to Watch", "Want to Listen"].includes(log.verdict);
-          
           return (
-            <div key={log.id} style={{ 
-              padding: "15px", borderBottom: "2px solid #eee", 
-              background: log.verdict === "Reading Now" ? "#f0f7ff" : "#fff",
-              borderLeft: isQueue ? "5px solid #000" : "none",
-              borderRadius: isQueue ? "12px" : "0px"
-            }}>
+            <div key={log.id} style={{ padding: "15px", borderBottom: "2px solid #eee", background: "#fff", borderRadius: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: '#999' }}>{log.media_type}</span>
@@ -218,12 +182,7 @@ export default function DidILikeIt() {
                   </div>
                 </div>
               </div>
-              {/* RESTORED THOUGHTS SECTION */}
-              {log.notes && (
-                <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "13px", fontStyle: "italic", borderLeft: "2px solid #ddd" }}>
-                  "{log.notes}"
-                </div>
-              )}
+              {log.notes && <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "13px", fontStyle: "italic" }}>"{log.notes}"</div>}
             </div>
           );
         })}
