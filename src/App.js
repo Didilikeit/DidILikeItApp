@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SECURE CONFIGURATION ---
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+// --- SECURE KEYS (Vercel) ---
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://gfqmbvaierdvlfwzyzlj.supabase.co";
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_3QrJ82zuDQi8sxoWmxi0MA_mWZ98OOk";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function DidILikeIt() {
@@ -21,10 +21,10 @@ export default function DidILikeIt() {
   const [year, setYear] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [viewMode, setViewMode] = useState("History"); // History vs Queue
+  const [filterDate, setFilterDate] = useState("All");
   const [editingId, setEditingId] = useState(null);
 
-  // 1. AUTH
+  // 1. AUTH LISTENER
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -38,7 +38,23 @@ export default function DidILikeIt() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. FETCH DATA
+  // 2. ACTIONS
+  const handleLogin = async () => {
+    if (!email || !password) return alert("Enter email and password!");
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { alert(error.message); setLoading(false); }
+    else { setUser(data.user); setLoading(false); }
+  };
+
+  const handleSignUp = async () => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) alert(error.message);
+    else alert("Sign up successful! Now try logging in.");
+  };
+
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setLogs([]); };
+
   const fetchLogs = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
@@ -47,9 +63,8 @@ export default function DidILikeIt() {
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
 
-  // 3. ACTIONS
   const handleSave = async () => {
-    if (!title || !verdict) return alert("Title and Status required!");
+    if (!title || !verdict) return alert("Title and Verdict required!");
     const logData = { title, creator, notes, media_type: mediaType, verdict, year_released: year || null, user_id: user.id };
     if (editingId) { await supabase.from("logs").update(logData).eq("id", editingId); }
     else { await supabase.from("logs").insert([logData]); }
@@ -68,24 +83,44 @@ export default function DidILikeIt() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 4. FILTER LOGIC
+  // 3. LOGIC & FILTERING
+  const counts = useMemo(() => ({
+    Book: logs.filter(l => l.media_type === 'Book').length,
+    Album: logs.filter(l => l.media_type === 'Album').length,
+    Movie: logs.filter(l => l.media_type === 'Movie').length,
+  }), [logs]);
+
+  const dateOptions = useMemo(() => {
+    const dates = logs.map(l => {
+      const d = new Date(l.logged_at);
+      return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+    });
+    return ["All", ...new Set(dates)];
+  }, [logs]);
+
   const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const isQueueItem = log.verdict === "Reading Now" || log.verdict === "Want to Watch" || log.verdict === "Want to Listen";
-      const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released}`.toLowerCase();
+    let result = logs.filter((log) => {
+      const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
+      const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
+      const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
+      
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
+      const matchesDate = filterDate === "All" || logMonthYear === filterDate;
       
-      // Global search ignores tabs. Otherwise, split by History/Queue.
-      const matchesView = searchTerm.length > 0 ? true : (viewMode === "Queue" ? isQueueItem : !isQueueItem);
-      
-      return matchesSearch && matchesMedium && matchesView;
+      return matchesSearch && matchesMedium && matchesDate;
     });
-  }, [logs, searchTerm, filterMedium, viewMode]);
+
+    // PIN "READING NOW" TO TOP
+    return result.sort((a, b) => {
+      if (a.verdict === "Reading Now") return -1;
+      if (b.verdict === "Reading Now") return 1;
+      return 0;
+    });
+  }, [logs, searchTerm, filterMedium, filterDate]);
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
-  // LOGIN SCREEN
   if (!user) {
     return (
       <div style={{ padding: "40px 20px", maxWidth: "400px", margin: "auto", textAlign: "center", fontFamily: "sans-serif" }}>
@@ -93,14 +128,8 @@ export default function DidILikeIt() {
         <h2>Did I Like It?</h2>
         <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
         <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-        <button onClick={async () => {
-           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-           if (error) alert(error.message); else setUser(data.user);
-        }} style={primaryBtn}>Login</button>
-        <button onClick={async () => {
-           const { error } = await supabase.auth.signUp({ email, password });
-           if (error) alert(error.message); else alert("Check your email!");
-        }} style={{ ...primaryBtn, background: "#eee", color: "#000", marginTop: "10px" }}>Create Account</button>
+        <button onClick={handleLogin} style={primaryBtn}>Login</button>
+        <button onClick={handleSignUp} style={{ ...primaryBtn, background: "#eee", color: "#000", marginTop: "10px" }}>Create Account</button>
       </div>
     );
   }
@@ -108,16 +137,26 @@ export default function DidILikeIt() {
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <button onClick={() => supabase.auth.signOut()} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
+        <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
         <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
         <div style={{ width: "50px" }}></div>
+      </div>
+
+      {/* COUNTERS BOX */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        {Object.entries(counts).map(([type, count]) => (
+          <div key={type} style={{ flex: 1, background: '#f0f0f0', padding: '10px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ddd' }}>
+            <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#666' }}>{type.toUpperCase()}S</div>
+            <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{count}</div>
+          </div>
+        ))}
       </div>
 
       {/* INPUT FORM */}
       <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
-            <button key={t} onClick={() => {setMediaType(t); setVerdict("");}} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? "#000" : "#eee", color: mediaType === t ? "#fff" : "#000", fontWeight: "bold" }}>{t}</button>
+            <button key={t} onClick={() => setMediaType(t)} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? "#000" : "#eee", color: mediaType === t ? "#fff" : "#000", fontWeight: "bold" }}>{t}</button>
           ))}
         </div>
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
@@ -128,53 +167,62 @@ export default function DidILikeIt() {
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* Dynamic Queue Status */}
-          {mediaType === "Book" && <button onClick={() => setVerdict("Reading Now")} style={{ ...verdictBtn, background: verdict === "Reading Now" ? "#3498db" : "#fff", color: verdict === "Reading Now" ? "#fff" : "#000" }}>📖 Reading Now</button>}
-          {mediaType === "Movie" && <button onClick={() => setVerdict("Want to Watch")} style={{ ...verdictBtn, background: verdict === "Want to Watch" ? "#9b59b6" : "#fff", color: verdict === "Want to Watch" ? "#fff" : "#000" }}>⏳ Want to Watch</button>}
-          {mediaType === "Album" && <button onClick={() => setVerdict("Want to Listen")} style={{ ...verdictBtn, background: verdict === "Want to Listen" ? "#e67e22" : "#fff", color: verdict === "Want to Listen" ? "#fff" : "#000" }}>🎧 Want to Listen</button>}
-
-          <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
-          </div>
+          {["Reading Now", "Liked", "Kind of", "Didn't Like"].map((v) => {
+            if (v === "Reading Now" && mediaType !== "Book") return null;
+            return (
+              <button key={v} onClick={() => setVerdict(v)} style={{ ...verdictBtn, background: verdict === v ? (v === "Reading Now" ? "#3498db" : v === "Liked" ? "#4caf50" : v === "Kind of" ? "#ff9800" : "#f44336") : "#fff", color: verdict === v ? "#fff" : "#000" }}>
+                {v === "Reading Now" ? "📖 Reading Now..." : v === "Liked" ? "🟢 I liked it" : v === "Kind of" ? "🟡 It was ok" : "🔴 I didn't like it"}
+              </button>
+            );
+          })}
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "LOCK IT IN"}</button>
       </div>
 
-      {/* VIEW TOGGLE */}
-      {searchTerm.length === 0 && (
-        <div style={{ display: 'flex', marginBottom: '15px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
-          <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent" }}>History</button>
-          <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent" }}>My Queue</button>
+      {/* FILTER CONTROLS */}
+      <div style={{ marginBottom: '20px' }}>
+        <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
+            <option value="All">All Mediums</option>
+            <option value="Book">Books</option>
+            <option value="Movie">Movies</option>
+            <option value="Album">Albums</option>
+          </select>
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
+            {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
+          </select>
         </div>
-      )}
-
-      {/* SEARCH/FILTER */}
-      <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
-        <input placeholder="🔍 Search everything..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", flex: 2, marginBottom: 0 }} />
-        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-          <option value="All">All Types</option>
-          <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
-        </select>
       </div>
 
-      {/* THE LIST */}
+      {/* LOG ENTRIES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
-          const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          const isReading = log.verdict === "Reading Now";
+          const verb = log.media_type === "Book" ? (isReading ? "Started on" : "Read on") : (log.media_type === "Album" ? "Listened to on" : "Watched on");
+          
           return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: "2px solid #eee", background: "#fff", borderRadius: "12px" }}>
+            <div key={log.id} style={{ 
+              padding: "20px", 
+              borderBottom: "2px solid #eee", 
+              background: isReading ? "#f0f7ff" : "transparent",
+              borderLeft: isReading ? "5px solid #3498db" : "none",
+              borderRadius: isReading ? "12px" : "0px",
+              boxShadow: isReading ? "0 4px 6px rgba(0,0,0,0.05)" : "none"
+            }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: '#999' }}>{log.media_type}</span>
-                  <div style={{ fontSize: "17px", fontWeight: "bold" }}>{log.title} {log.year_released && <span style={{ fontWeight: "normal", color: "#888", fontSize: '14px' }}>({log.year_released})</span>}</div>
-                  <div style={{ color: "#666", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>Added {dateLabel}</div>
+                  <span style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', background: isReading ? '#3498db' : '#eee', padding: '2px 6px', borderRadius: '4px', color: isReading ? '#fff' : '#666' }}>
+                    {isReading ? "CURRENTLY READING" : log.media_type}
+                  </span>
+                  <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} <span style={{ fontWeight: "normal", color: "#888", fontSize: '14px' }}>({log.year_released})</span></div>
+                  <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
+                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>{verb} {dateLabel}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{ fontSize: "20px" }}>
-                    {log.verdict === "Reading Now" ? "📖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
+                    {log.verdict === "Reading Now" ? "📖" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
                   </span>
                   <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                     <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
@@ -182,7 +230,19 @@ export default function DidILikeIt() {
                   </div>
                 </div>
               </div>
-              {log.notes && <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "13px", fontStyle: "italic" }}>"{log.notes}"</div>}
+              {log.notes && (
+                <div 
+                  onClick={(e) => {
+                    const isExpanded = e.currentTarget.style.webkitLineClamp === 'unset';
+                    e.currentTarget.style.display = "-webkit-box";
+                    e.currentTarget.style.webkitBoxOrient = "vertical";
+                    e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
+                  }}
+                  style={{ marginTop: "10px", padding: "12px", background: isReading ? "#fff" : "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                >
+                  "{log.notes}"
+                </div>
+              )}
             </div>
           );
         })}
