@@ -28,6 +28,7 @@ export default function DidILikeIt() {
   
   const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
   const [isEditingName, setIsEditingName] = useState(false);
+  const [showAbout, setShowAbout] = useState(false); // New state for About section
 
   const listRef = useRef(null);
 
@@ -157,11 +158,32 @@ export default function DidILikeIt() {
 
   return (
     <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-        <button onClick={() => supabase.auth.signOut()} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>Logout</button>
-        <h2 style={{ margin: 0 }}>🤔 Did I Like It?</h2>
-        <div style={{ width: "50px" }}></div>
+      {/* HEADER NAV */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+        <div style={{ display: 'flex', gap: '15px' }}>
+          <button onClick={() => setShowAbout(!showAbout)} style={{ ...smallBtn, fontWeight: showAbout ? 'bold' : 'normal' }}>
+            {showAbout ? "← Close" : "About"}
+          </button>
+          <button onClick={() => supabase.auth.signOut()} style={{ ...smallBtn, color: "#888" }}>Logout</button>
+        </div>
+        <h2 style={{ margin: 0 }}>🤔</h2>
       </div>
+
+      {/* ABOUT SECTION */}
+      {showAbout && (
+        <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
+          <h3 style={{ marginTop: 0, color: "#2980b9" }}>What is this?</h3>
+          <p style={{ fontSize: "14px", color: "#444" }}>
+            <strong>Did I Like It?</strong> is a low-pressure media diary. It's not about being a critic; it's about your gut reaction.
+          </p>
+          <div style={{ fontSize: "13px", background: "#fff", padding: "10px", borderRadius: "8px", border: "1px solid #eee" }}>
+            <div style={{ marginBottom: "5px" }}>🟢 <strong>I liked it:</strong> Would revisit or recommend.</div>
+            <div style={{ marginBottom: "5px" }}>🟡 <strong>It was ok:</strong> Glad I tried it, but once was enough.</div>
+            <div>🔴 <strong>I didn't like it:</strong> Simply wasn't for me.</div>
+          </div>
+          <p style={{ fontSize: "12px", color: "#888", marginTop: "10px" }}>Your history is saved automatically as you log.</p>
+        </div>
+      )}
 
       {/* STATS SECTION */}
       <div style={{ marginBottom: '25px' }}>
@@ -231,13 +253,14 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
       </div>
 
-      {/* TABS & SEARCH */}
+      {/* TABS AREA */}
       <div ref={listRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent" }}>{tab}</button>
         ))}
       </div>
 
+      {/* SEARCH & FILTERS */}
       <div style={{ marginBottom: '20px' }}>
         <input placeholder="🔍 Global search (all tabs)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -268,7 +291,6 @@ export default function DidILikeIt() {
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{verb} on {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                 </div>
 
-                {/* SENTIMENT BADGE SECTION */}
                 <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                   <div style={{
                     padding: '4px 10px',
