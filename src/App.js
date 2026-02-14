@@ -21,8 +21,7 @@ export default function DidILikeIt() {
   const [year, setYear] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [filterDate, setFilterDate] = useState("All");
-  const [filterStatus, setFilterStatus] = useState("All");
+  const [viewMode, setViewMode] = useState("History"); // "History" or "Queue"
   const [editingId, setEditingId] = useState(null);
 
   // 1. AUTH LISTENER
@@ -86,40 +85,35 @@ export default function DidILikeIt() {
 
   // 3. LOGIC & FILTERING
   const counts = useMemo(() => ({
-    Book: logs.filter(l => l.media_type === 'Book').length,
-    Album: logs.filter(l => l.media_type === 'Album').length,
-    Movie: logs.filter(l => l.media_type === 'Movie').length,
+    Book: logs.filter(l => l.media_type === 'Book' && !l.verdict.includes("Want to") && l.verdict !== "Reading Now").length,
+    Album: logs.filter(l => l.media_type === 'Album' && !l.verdict.includes("Want to")).length,
+    Movie: logs.filter(l => l.media_type === 'Movie' && !l.verdict.includes("Want to")).length,
   }), [logs]);
 
-  const dateOptions = useMemo(() => {
-    const dates = logs.map(l => {
-      const d = new Date(l.logged_at);
-      return d.toLocaleString('default', { month: 'long', year: 'numeric' });
-    });
-    return ["All", ...new Set(dates)];
-  }, [logs]);
-
   const filteredLogs = useMemo(() => {
-    let result = logs.filter((log) => {
-      const logDateFull = new Date(log.logged_at).toLocaleString('default', { month: 'long', day: 'numeric', year: 'numeric' });
-      const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      const searchableText = [log.title, log.creator, log.notes, log.year_released, logDateFull].join(" ").toLowerCase();
+    return logs.filter((log) => {
+      const isQueueItem = log.verdict === "Reading Now" || log.verdict.startsWith("Want to");
       
+      // Filter by Search Term
+      const searchableText = [log.title, log.creator, log.notes].join(" ").toLowerCase();
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-      const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-      const matchesDate = filterDate === "All" || logMonthYear === filterDate;
-      const matchesStatus = filterStatus === "All" || log.verdict === filterStatus;
       
-      return matchesSearch && matchesMedium && matchesDate && matchesStatus;
+      // Filter by Medium
+      const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
+      
+      // Filter by View Mode (History vs Queue)
+      const matchesView = viewMode === "Queue" ? isQueueItem : !isQueueItem;
+      
+      return matchesSearch && matchesMedium && matchesView;
+    }).sort((a, b) => {
+        // In Queue, keep "Reading Now" at the very top
+        if (viewMode === "Queue") {
+            if (a.verdict === "Reading Now") return -1;
+            if (b.verdict === "Reading Now") return 1;
+        }
+        return 0;
     });
-
-    // PIN "READING NOW" ONLY
-    return result.sort((a, b) => {
-      if (a.verdict === "Reading Now") return -1;
-      if (b.verdict === "Reading Now") return 1;
-      return 0;
-    });
-  }, [logs, searchTerm, filterMedium, filterDate, filterStatus]);
+  }, [logs, searchTerm, filterMedium, viewMode]);
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
@@ -144,6 +138,7 @@ export default function DidILikeIt() {
         <div style={{ width: "50px" }}></div>
       </div>
 
+      {/* COUNTERS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         {Object.entries(counts).map(([type, count]) => (
           <div key={type} style={{ flex: 1, background: '#f0f0f0', padding: '10px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ddd' }}>
@@ -194,51 +189,42 @@ export default function DidILikeIt() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "LOCK IT IN"}</button>
       </div>
 
-      {/* FILTER CONTROLS */}
-      <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
-        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-          <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '100px', marginBottom: 5 }}>
-            <option value="All">All Mediums</option>
-            <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '100px', marginBottom: 5 }}>
-            <option value="All">All Statuses</option>
-            <option value="Reading Now">Reading Now</option>
-            <option value="Want to Watch">Watchlist</option>
-            <option value="Want to Listen">Listen-list</option>
-            <option value="Liked">Liked</option>
-            <option value="Kind of">Ok</option>
-            <option value="Didn't Like">Disliked</option>
-          </select>
-          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '100px', marginBottom: 5 }}>
-            {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-          </select>
-        </div>
+      {/* VIEW TOGGLE */}
+      <div style={{ display: 'flex', marginBottom: '20px', background: '#eee', borderRadius: '10px', padding: '4px' }}>
+        <button onClick={() => setViewMode("History")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "History" ? "#fff" : "transparent", boxShadow: viewMode === "History" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>History</button>
+        <button onClick={() => setViewMode("Queue")} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: viewMode === "Queue" ? "#fff" : "transparent", boxShadow: viewMode === "Queue" ? "0 2px 4px rgba(0,0,0,0.1)" : "none" }}>My Queue</button>
+      </div>
+
+      {/* SEARCH & FILTER */}
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
+        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: 0, flex: 2 }} />
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
+          <option value="All">All Types</option>
+          <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
+        </select>
       </div>
 
       {/* LOG ENTRIES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Nothing to show here yet!</div>}
         {filteredLogs.map((log) => {
-          const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          const dateLabel = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
           const isReading = log.verdict === "Reading Now";
           const isQueue = log.verdict.startsWith("Want to");
           
           return (
             <div key={log.id} style={{ 
-              padding: "20px", borderBottom: "2px solid #eee", 
-              background: isReading ? "#f0f7ff" : (isQueue ? "#fcfcfc" : "transparent"),
-              borderLeft: isReading ? "5px solid #3498db" : (isQueue ? "5px solid #ccc" : "none"),
-              borderRadius: (isReading || isQueue) ? "12px" : "0px"
+              padding: "15px", borderBottom: "2px solid #eee", 
+              background: isReading ? "#f0f7ff" : (isQueue ? "#fff" : "transparent"),
+              borderLeft: isReading ? "5px solid #3498db" : (isQueue ? "5px solid #9b59b6" : "none"),
+              borderRadius: (isReading || isQueue) ? "12px" : "0px",
+              boxShadow: (isReading || isQueue) ? "0 2px 8px rgba(0,0,0,0.05)" : "none"
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', background: isReading ? '#3498db' : '#eee', padding: '2px 6px', borderRadius: '4px', color: isReading ? '#fff' : '#666' }}>
-                    {log.verdict === "Reading Now" ? "Reading Now" : (isQueue ? "Queue" : log.media_type)}
-                  </span>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} <span style={{ fontWeight: "normal", color: "#888", fontSize: '14px' }}>({log.year_released})</span></div>
-                  <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>Added {dateLabel}</div>
+                  <div style={{ fontSize: "17px", fontWeight: "bold" }}>{log.title}</div>
+                  <div style={{ color: "#666", fontSize: '14px' }}>{log.creator}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{isQueue ? "Added" : "Logged"} {dateLabel}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{ fontSize: "20px" }}>
@@ -258,7 +244,7 @@ export default function DidILikeIt() {
                     e.currentTarget.style.webkitBoxOrient = "vertical";
                     e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
                   }}
-                  style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                  style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "13px", fontStyle: "italic", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}
                 >
                   "{log.notes}"
                 </div>
