@@ -135,9 +135,9 @@ export default function DidILikeItUltimate() {
 
   const getVerdictStyle = (v) => {
     switch(v) {
-      case "Liked": return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
-      case "Kind of": return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
-      case "Didn't Like": return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+      case "I liked it": return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
+      case "It was ok": return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
+      case "I didn't like it": return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
       case "Currently Reading": return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
       case "Want to Read": case "Want to Watch": case "Want to Listen": return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
       default: return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
@@ -149,7 +149,12 @@ export default function DidILikeItUltimate() {
     const queueTypes = ["Want to Read", "Want to Watch", "Want to Listen"];
     const getBreakdown = (type) => {
       const items = logs.filter(l => l.media_type === type && !queueTypes.includes(l.verdict) && l.verdict !== "Currently Reading");
-      return { total: items.length, liked: items.filter(l => l.verdict === "Liked").length, ok: items.filter(l => l.verdict === "Kind of").length, no: items.filter(l => l.verdict === "Didn't Like").length };
+      return { 
+        total: items.length, 
+        liked: items.filter(l => l.verdict === "I liked it").length, 
+        ok: items.filter(l => l.verdict === "It was ok").length, 
+        no: items.filter(l => l.verdict === "I didn't like it").length 
+      };
     };
     return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), active: logs.filter(l => l.verdict === "Currently Reading").length, queue: logs.filter(l => queueTypes.includes(l.verdict)).length };
   }, [logs]);
@@ -161,7 +166,9 @@ export default function DidILikeItUltimate() {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      const searchable = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${logMonthYear}`.toLowerCase();
+      // Added bracketed year released to searchable text
+      const yearWithBrackets = log.year_released ? `(${log.year_released})` : "";
+      const searchable = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${logMonthYear} ${yearWithBrackets}`.toLowerCase();
       
       const matchesSearch = searchable.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
@@ -268,9 +275,9 @@ export default function DidILikeItUltimate() {
             <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : "#fff", color: verdict.includes("Want") ? "#fff" : "#000" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
+            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : "#fff", color: verdict === "I liked it" ? "#fff" : "#000" }}>🟢 I liked it</button>
+            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : "#fff", color: verdict === "It was ok" ? "#fff" : "#000" }}>🟡 It was ok</button>
+            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : "#fff", color: verdict === "I didn't like it" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
