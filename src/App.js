@@ -120,8 +120,6 @@ export default function DidILikeIt() {
   const stats = useMemo(() => {
     const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
     const active = logs.filter(l => l.verdict === "Currently Reading");
-    const queueCount = logs.filter(l => queueStatuses.includes(l.verdict)).length;
-    
     const getBreakdown = (type) => {
       const items = logs.filter(l => l.media_type === type && !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
       return {
@@ -131,8 +129,7 @@ export default function DidILikeIt() {
         no: items.filter(l => l.verdict === "Didn't Like").length
       };
     };
-
-    return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), activeCount: active.length, queueCount: queueCount };
+    return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), activeCount: active.length, queueCount: logs.filter(l => queueStatuses.includes(l.verdict)).length };
   }, [logs]);
 
   const dateOptions = useMemo(() => {
@@ -145,14 +142,11 @@ export default function DidILikeIt() {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const isHistory = !isQueue && !isActive;
-      
       const logDateObj = new Date(log.logged_at);
       const logMonthYear = logDateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
       const fullDateStr = logDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-      // Improved Searchable Text (Includes Titles, Creators, Notes, and ALL Dates)
-      const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released || ""} ${fullDateStr}`.toLowerCase();
-      
+      const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released || ""} ${fullDateStr} ${log.verdict}`.toLowerCase();
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       
@@ -170,8 +164,15 @@ export default function DidILikeIt() {
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
 
-  // (The rest of the component remains exactly the same as the previous full version)
-  // Rendering logic starts below...
+  // Visual Helper for Media Styles
+  const getMediaStyle = (type) => {
+    switch(type) {
+      case 'Book': return { color: '#2980b9', bg: '#ebf5fb', icon: '📖' };
+      case 'Movie': return { color: '#8e44ad', bg: '#f5eef8', icon: '🎬' };
+      case 'Album': return { color: '#16a085', bg: '#e8f8f5', icon: '💿' };
+      default: return { color: '#7f8c8d', bg: '#f4f6f7', icon: '📎' };
+    }
+  };
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
@@ -203,7 +204,7 @@ export default function DidILikeIt() {
         </div>
       </div>
 
-      {/* ABOUT & EXPORT */}
+      {/* ABOUT */}
       {showAbout && (
         <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db", lineHeight: "1.6" }}>
           <h3 style={{ marginTop: 0, color: "#2980b9" }}>What is this?</h3>
@@ -229,19 +230,22 @@ export default function DidILikeIt() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
-          {["Book", "Movie", "Album"].map(type => (
-            <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: '2px solid #eee', borderBottom: 'none' }}>
-                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>{type}s</div>
-                <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
+          {["Book", "Movie", "Album"].map(type => {
+            const m = getMediaStyle(type);
+            return (
+              <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ background: '#fff', padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: '2px solid #eee', borderBottom: 'none' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color, textTransform: 'uppercase' }}>{m.icon} {type}s</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
+                  <div style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
+                  <div style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
+                  <div style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
-                <div title="Liked" style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
-                <div title="Ok" style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
-                <div title="No" style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
@@ -280,9 +284,9 @@ export default function DidILikeIt() {
             <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
+            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
+            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
+            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE" : "SAVE"}</button>
@@ -295,7 +299,7 @@ export default function DidILikeIt() {
         ))}
       </div>
       <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search library (by title, creator, or date)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
@@ -311,13 +315,31 @@ export default function DidILikeIt() {
         {filteredLogs.map((log) => {
           const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
           const isActive = log.verdict === "Currently Reading";
+          const m = getMediaStyle(log.media_type);
           let verb = isActive ? "Started" : isQueue ? "Added" : (log.media_type === "Book" ? "Read" : log.media_type === "Movie" ? "Watched" : "Listened to");
           
           return (
-            <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
+            <div key={log.id} style={{ 
+              padding: "15px 0 15px 15px", 
+              borderBottom: "2px solid #eee",
+              borderLeft: `5px solid ${m.color}`, // Visual Accent Line
+              borderRadius: "4px"
+            }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
+                  {/* Color-Coded Tag */}
+                  <span style={{ 
+                    fontSize: '10px', 
+                    fontWeight: 'bold', 
+                    background: m.bg, 
+                    color: m.color,
+                    padding: '2px 8px', 
+                    borderRadius: '4px',
+                    border: `1px solid ${m.color}33` 
+                  }}>
+                    {m.icon} {log.media_type.toUpperCase()}
+                  </span>
+                  
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title}</div>
                   <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
@@ -325,20 +347,19 @@ export default function DidILikeIt() {
                     {log.year_released && ` • Released ${log.year_released}`}
                   </div>
                 </div>
-                <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', paddingRight: '10px' }}>
                   <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: log.verdict === "Liked" ? "#e8f5e9" : log.verdict === "Kind of" ? "#fff3e0" : log.verdict === "Didn't Like" ? "#ffebee" : "#f4f6f7", color: log.verdict === "Liked" ? "#2e7d32" : log.verdict === "Kind of" ? "#ef6c00" : log.verdict === "Didn't Like" ? "#c62828" : "#566573", border: `1px solid ${log.verdict === "Liked" ? "#4caf50" : log.verdict === "Kind of" ? "#ff9800" : log.verdict === "Didn't Like" ? "#f44336" : "#d5dbdb"}` }}>
-                    {log.verdict}
+                    {log.verdict === "Liked" ? "🟢 Liked it" : log.verdict === "Kind of" ? "🟡 It was Ok" : log.verdict === "Didn't Like" ? "🔴 No" : log.verdict}
                   </div>
                   <div style={{ display: "flex", gap: "10px" }}><button onClick={() => startEdit(log)} style={smallBtn}>Edit</button><button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button></div>
                 </div>
               </div>
-              {log.notes && <div style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
+              {log.notes && <div style={{ marginTop: "10px", marginRight: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
             </div>
           );
         })}
       </div>
 
-      {/* FLOATING BACK TO TOP ARROW */}
       {showScrollBtn && (
         <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ position: "fixed", bottom: "30px", right: "20px", width: "45px", height: "45px", borderRadius: "50%", background: "rgba(0, 0, 0, 0.7)", color: "#fff", border: "none", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 1000 }}>↑</button>
       )}
