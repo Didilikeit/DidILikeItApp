@@ -166,7 +166,6 @@ export default function DidILikeItUltimate() {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      // Added bracketed year released to searchable text
       const yearWithBrackets = log.year_released ? `(${log.year_released})` : "";
       const searchable = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${logMonthYear} ${yearWithBrackets}`.toLowerCase();
       
@@ -237,9 +236,9 @@ export default function DidILikeItUltimate() {
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked || ""}</div>
-                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok || ""}</div>
-                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no || ""}</div>
+                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
+                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
+                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
                 </div>
               </div>
             );
@@ -322,7 +321,7 @@ export default function DidILikeItUltimate() {
                     fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', 
                     background: v.bg, color: v.color, border: `1px solid ${v.border}`, marginBottom: '10px', display: 'inline-block' 
                   }}>
-                    {v.emoji} {log.verdict.toUpperCase()}
+                    {v.emoji} {log.verdict}
                   </div>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                     <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={smallBtn}>Edit</button>
