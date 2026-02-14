@@ -19,7 +19,7 @@ export default function DidILikeIt() {
   const [mediaType, setMediaType] = useState("Movie");
   const [verdict, setVerdict] = useState("");
   const [year, setYear] = useState("");
-  const [manualDate, setManualDate] = useState(""); // NEW: For retrospective logging
+  const [manualDate, setManualDate] = useState(""); 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
@@ -56,7 +56,6 @@ export default function DidILikeIt() {
 
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
-    
     const logData = { 
       title: title.trim(), 
       creator: creator.trim(), 
@@ -65,19 +64,15 @@ export default function DidILikeIt() {
       verdict, 
       year_released: year || null, 
       user_id: user.id,
-      // If a manual date is picked, use it. Otherwise, Supabase handles 'now' on insert.
       ...(manualDate && { logged_at: new Date(manualDate).toISOString() })
     };
-    
     const { error } = editingId 
       ? await supabase.from("logs").update(logData).eq("id", editingId)
       : await supabase.from("logs").insert([logData]);
-
     if (error) alert(`Error: ${error.message}`);
     else {
       setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
-      setEditingId(null);
-      fetchLogs();
+      setEditingId(null); fetchLogs();
     }
   };
 
@@ -89,18 +84,23 @@ export default function DidILikeIt() {
     setEditingId(log.id); setTitle(log.title); setCreator(log.creator || "");
     setNotes(log.notes || ""); setYear(log.year_released || "");
     setVerdict(log.verdict); setMediaType(log.media_type);
-    // Format existing date for the date input (YYYY-MM-DD)
     setManualDate(new Date(log.logged_at).toISOString().split('T')[0]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 3. LOGIC & FILTERING
-  const counts = useMemo(() => {
-    const historyStatuses = ["Liked", "Kind of", "Didn't Like"];
+  // 3. LOGIC & STATS
+  const stats = useMemo(() => {
+    const queueStatuses = ["Want to Read", "Want to Watch", "Want to Listen"];
+    const completed = logs.filter(l => !queueStatuses.includes(l.verdict) && l.verdict !== "Currently Reading");
+    const active = logs.filter(l => l.verdict === "Currently Reading");
+    const queue = logs.filter(l => queueStatuses.includes(l.verdict));
+
     return {
-      Book: logs.filter(l => l.media_type === 'Book' && historyStatuses.includes(l.verdict)).length,
-      Album: logs.filter(l => l.media_type === 'Album' && historyStatuses.includes(l.verdict)).length,
-      Movie: logs.filter(l => l.media_type === 'Movie' && historyStatuses.includes(l.verdict)).length,
+      books: completed.filter(l => l.media_type === "Book").length,
+      movies: completed.filter(l => l.media_type === "Movie").length,
+      albums: completed.filter(l => l.media_type === "Album").length,
+      activeCount: active.length,
+      queueCount: queue.length
     };
   }, [logs]);
 
@@ -116,20 +116,16 @@ export default function DidILikeIt() {
     const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
     const isActive = log.verdict === "Currently Reading";
     const isHistory = !isQueue && !isActive;
-
     const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
     const searchableText = `${log.title} ${log.creator} ${log.notes}`.toLowerCase();
     const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
     const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-
     let matchesView = false;
     if (searchTerm.length > 0) matchesView = true;
     else if (viewMode === "Reading") matchesView = isActive;
     else if (viewMode === "Queue") matchesView = isQueue;
     else matchesView = isHistory;
-
     const matchesDate = !isHistory || filterDate === "All" || logMonthYear === filterDate;
-    
     return matchesSearch && matchesMedium && matchesDate && matchesView;
   });
 
@@ -158,15 +154,31 @@ export default function DidILikeIt() {
         <div style={{ width: "50px" }}></div>
       </div>
 
-      <h3 style={{ margin: "10px 0", fontSize: '22px' }}>{displayName}'s Stats</h3>
-
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        {Object.entries(counts).map(([type, count]) => (
-          <div key={type} style={{ flex: 1, background: '#f0f0f0', padding: '10px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ddd' }}>
-            <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#666' }}>{type.toUpperCase()}S</div>
-            <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{count}</div>
+      {/* REFINED STATS SECTION */}
+      <div style={{ marginBottom: '25px' }}>
+        <h3 style={{ margin: "10px 0", fontSize: '22px' }}>{displayName}'s Library</h3>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          {[
+            { label: 'Books', count: stats.books },
+            { label: 'Movies', count: stats.movies },
+            { label: 'Albums', count: stats.albums }
+          ].map(item => (
+            <div key={item.label} style={{ flex: 1, background: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', border: '2px solid #eee' }}>
+              <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>{item.label}</div>
+              <div style={{ fontSize: '20px', fontWeight: '800' }}>{item.count}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <div onClick={() => setViewMode("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid #f9e79f' }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading Now</span>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: '#996e00' }}>{stats.activeCount}</span>
           </div>
-        ))}
+          <div onClick={() => setViewMode("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid #d5dbdb' }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 In Queue</span>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: '#566573' }}>{stats.queueCount}</span>
+          </div>
+        </div>
       </div>
 
       {/* INPUT FORM */}
@@ -176,22 +188,18 @@ export default function DidILikeIt() {
             <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? "#000" : "#eee", color: mediaType === t ? "#fff" : "#000", fontWeight: "bold" }}>{t}</button>
           ))}
         </div>
-        
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
-        
         <div style={{ display: "flex", gap: "10px" }}>
           <input placeholder={mediaType === "Book" ? "Author" : mediaType === "Movie" ? "Director" : "Artist"} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
         </div>
-
-        {/* RETROSPECTIVE DATE PICKER */}
         <div style={{ marginBottom: "10px" }}>
-          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "3px", fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "3px", fontWeight: "bold", textTransform: "uppercase" }}>
+            {mediaType === "Book" ? "Date Read" : mediaType === "Movie" ? "Date Watched" : "Date Listened"} (Optional)
+          </label>
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginBottom: 0, padding: "8px" }} />
         </div>
-
         <textarea placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", resize: "none" }} />
-        
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {mediaType === "Book" ? (
             <div style={{ display: 'flex', gap: '5px' }}>
@@ -199,93 +207,61 @@ export default function DidILikeIt() {
               <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : "#fff", color: verdict === "Want to Read" ? "#fff" : "#000" }}>🔖 Want to Read</button>
             </div>
           ) : (
-            <button 
-              onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} 
-              style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}
-            >
-              {mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}
-            </button>
+            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#9b59b6" : "#fff", color: ["Want to Watch", "Want to Listen"].includes(verdict) ? "#fff" : "#000" }}>{mediaType === "Movie" ? "⏳ Want to Watch" : "🎧 Want to Listen"}</button>
           )}
-
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
+            <button onClick={() => setVerdict("Liked")} style={{ ...verdictBtn, flex: 1, background: verdict === "Liked" ? "#4caf50" : "#fff", color: verdict === "Liked" ? "#fff" : "#000" }}>🟢 Liked</button>
+            <button onClick={() => setVerdict("Kind of")} style={{ ...verdictBtn, flex: 1, background: verdict === "Kind of" ? "#ff9800" : "#fff", color: verdict === "Kind of" ? "#fff" : "#000" }}>🟡 Ok</button>
+            <button onClick={() => setVerdict("Didn't Like")} style={{ ...verdictBtn, flex: 1, background: verdict === "Didn't Like" ? "#f44336" : "#fff", color: verdict === "Didn't Like" ? "#fff" : "#000" }}>🔴 No</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE TO LOG"}</button>
       </div>
 
-      {/* THREE-TAB NAVIGATION */}
+      {/* TABS */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
-          <button 
-            key={tab}
-            onClick={() => setViewMode(tab)} 
-            style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent", boxShadow: viewMode === tab ? "0 2px 5px rgba(0,0,0,0.1)" : "none" }}>
-            {tab === "Queue" ? "My Queue" : tab}
-          </button>
+          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', background: viewMode === tab ? "#fff" : "transparent", boxShadow: viewMode === tab ? "0 2px 5px rgba(0,0,0,0.1)" : "none" }}>{tab === "Queue" ? "My Queue" : tab}</button>
         ))}
       </div>
 
-      {/* FILTERS */}
-      <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-            <option value="All">All Mediums</option>
-            <option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
-          </select>
-          {viewMode === "History" && (
-            <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
-              {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-            </select>
-          )}
-        </div>
-      </div>
-
-      {/* LIST */}
+      {/* LIST VIEW */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        {filteredLogs.map((log) => (
-          <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
-                <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
-                <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
-                <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                   {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+        {filteredLogs.map((log) => {
+          const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
+          const isActive = log.verdict === "Currently Reading";
+          let verb = isActive ? "Started on" : isQueue ? "Added on" : (log.media_type === "Book" ? "Read on" : log.media_type === "Movie" ? "Watched on" : "Listened to on");
+
+          return (
+            <div key={log.id} style={{ padding: "15px 0", borderBottom: "2px solid #eee" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '10px', fontWeight: 'bold', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{log.media_type}</span>
+                  <div style={{ fontSize: "18px", fontWeight: "bold", marginTop: '5px' }}>{log.title} {log.year_released && <span style={{ fontWeight: 'normal', color: '#888' }}>({log.year_released})</span>}</div>
+                  <div style={{ color: "#444", fontSize: '14px' }}>{log.creator}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+                    {verb} {new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: "20px" }}>
+                    {log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
+                  </span>
+                  <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                    <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
+                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
+                  </div>
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: "20px" }}>
-                   {log.verdict === "Currently Reading" ? "📖" : log.verdict === "Want to Read" ? "🔖" : log.verdict === "Want to Watch" ? "⏳" : log.verdict === "Want to Listen" ? "🎧" : (log.verdict === "Liked" ? "🟢" : log.verdict === "Kind of" ? "🟡" : "🔴")}
-                </span>
-                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                  <button onClick={() => startEdit(log)} style={smallBtn}>Edit</button>
-                  <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: "red" }}>Delete</button>
+              {log.notes && (
+                <div onClick={(e) => { const isExp = e.currentTarget.style.webkitLineClamp === 'unset'; e.currentTarget.style.webkitLineClamp = isExp ? "3" : "unset"; }}
+                     style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer", display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  "{log.notes}"
                 </div>
-              </div>
+              )}
             </div>
-            
-            {log.notes && (
-              <div 
-                onClick={(e) => {
-                  const isExpanded = e.currentTarget.style.webkitLineClamp === 'unset';
-                  e.currentTarget.style.webkitLineClamp = isExpanded ? "3" : "unset";
-                }}
-                style={{ 
-                  marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", 
-                  fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd", cursor: "pointer",
-                  display: "-webkit-box", WebkitLineClamp: "3", WebkitBoxOrient: "vertical", overflow: "hidden" 
-                }}
-              >
-                "{log.notes}"
-              </div>
-            )}
-          </div>
-        ))}
-        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', color: '#999', marginTop: '20px' }}>Nothing here yet!</div>}
+          );
+        })}
       </div>
     </div>
   );
