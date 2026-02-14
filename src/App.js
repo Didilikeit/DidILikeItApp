@@ -132,13 +132,7 @@ export default function DidILikeIt() {
       };
     };
 
-    return { 
-      Book: getBreakdown("Book"), 
-      Movie: getBreakdown("Movie"), 
-      Album: getBreakdown("Album"), 
-      activeCount: active.length, 
-      queueCount: queueCount 
-    };
+    return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), activeCount: active.length, queueCount: queueCount };
   }, [logs]);
 
   const dateOptions = useMemo(() => {
@@ -151,8 +145,14 @@ export default function DidILikeIt() {
       const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
       const isActive = log.verdict === "Currently Reading";
       const isHistory = !isQueue && !isActive;
-      const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      const searchableText = `${log.title} ${log.creator} ${log.notes}`.toLowerCase();
+      
+      const logDateObj = new Date(log.logged_at);
+      const logMonthYear = logDateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+      const fullDateStr = logDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+      // Improved Searchable Text (Includes Titles, Creators, Notes, and ALL Dates)
+      const searchableText = `${log.title} ${log.creator} ${log.notes} ${log.year_released || ""} ${fullDateStr}`.toLowerCase();
+      
       const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
       
@@ -169,6 +169,9 @@ export default function DidILikeIt() {
       return matchesSearch && matchesMedium && matchesDate && matchesView;
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
+
+  // (The rest of the component remains exactly the same as the previous full version)
+  // Rendering logic starts below...
 
   if (loading) return <div style={{ textAlign: "center", padding: "50px", fontFamily: "sans-serif" }}>Loading...</div>;
 
@@ -233,18 +236,18 @@ export default function DidILikeIt() {
                 <div style={{ fontSize: '20px', fontWeight: '800' }}>{stats[type].total}</div>
               </div>
               <div style={{ display: 'flex', gap: '2px', height: '30px' }}>
-                <div style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
-                <div style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
-                <div style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
+                <div title="Liked" style={{ flex: 1, background: '#e8f5e9', color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 0 8px', border: '1px solid #c8e6c9' }}>{stats[type].liked}</div>
+                <div title="Ok" style={{ flex: 1, background: '#fff3e0', color: '#ef6c00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid #ffe0b2' }}>{stats[type].ok}</div>
+                <div title="No" style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', borderRadius: '0 0 8px 0', border: '1px solid #ffcdd2' }}>{stats[type].no}</div>
               </div>
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f', display: 'flex' }}>
+          <div onClick={() => jumpToTab("Reading")} style={{ flex: 1, background: '#fef9e7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Reading" ? '2px solid #f1c40f' : '1px solid #f9e79f' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#996e00' }}>📖 Reading</span><span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.activeCount}</span>
           </div>
-          <div onClick={() => jumpToTab("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb', display: 'flex' }}>
+          <div onClick={() => jumpToTab("Queue")} style={{ flex: 1, background: '#f4f6f7', padding: '8px 12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: viewMode === "Queue" ? '2px solid #34495e' : '1px solid #d5dbdb' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#566573' }}>🔖 Queue</span><span style={{ fontSize: '14px', fontWeight: '800' }}>{stats.queueCount}</span>
           </div>
         </div>
@@ -292,7 +295,7 @@ export default function DidILikeIt() {
         ))}
       </div>
       <div style={{ marginBottom: '20px' }}>
-        <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
+        <input placeholder="🔍 Search library (by title, creator, or date)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "30px", marginBottom: '10px' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, marginBottom: 0 }}>
             <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
