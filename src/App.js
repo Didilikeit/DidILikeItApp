@@ -221,8 +221,37 @@ export default function DidILikeIt() {
                   </div>
                 </div>
               </div>
-              {log.notes && <div style={{ marginTop: "10px", padding: "10px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>"{log.notes}"</div>}
-            </div>
+{log.notes && (
+  <div 
+    onClick={(e) => {
+      // Toggle between 3 lines and full height when clicked
+      if (e.currentTarget.style.webkitLineClamp === 'unset') {
+        e.currentTarget.style.webkitLineClamp = '3';
+      } else {
+        e.currentTarget.style.webkitLineClamp = 'unset';
+      }
+    }}
+    style={{
+      marginTop: "10px",
+      padding: "12px",
+      background: "#f9f9f9",
+      borderRadius: "8px",
+      fontSize: "14px",
+      fontStyle: "italic",
+      borderLeft: "4px solid #ddd",
+      cursor: "pointer",
+      // THE MAGIC:
+      display: "-webkit-box",
+      WebkitLineClamp: "3", // Limit to 3 lines
+      WebkitBoxOrient: "vertical",
+      overflow: "hidden",
+      transition: "all 0.3s ease"
+    }}
+    title="Click to read more"
+  >
+    "{log.notes}"
+  </div>
+)}            </div>
           );
         })}
       </div>
