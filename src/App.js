@@ -134,38 +134,52 @@ export default function DidILikeItUltimate() {
   };
 
   const getVerdictStyle = (v) => {
-    const lowerV = (v || "").toLowerCase();
-    if (lowerV.includes("liked")) return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
-    if (lowerV.includes("ok")) return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
-    if (lowerV.includes("didn't like") || lowerV.includes("didnt like") || lowerV.includes("not like")) return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+    // Explicit matching for your requested categories
+    if (v === "I liked it") return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
+    if (v === "It was ok") return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
+    if (v === "I didn't like it") return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
     
-    switch(v) {
-      case "Currently Reading": return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
-      case "Want to Read": case "Want to Watch": case "Want to Listen": return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
-      default: return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
-    }
+    // Status-based matching
+    if (v === "Currently Reading") return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
+    if (v && v.startsWith("Want to")) return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
+    
+    return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
   };
 
-  // --- MEMOIZED DATA ---
+  // --- MEMOIZED DATA (REBUILT FROM SCRATCH) ---
   const stats = useMemo(() => {
-    const queueTypes = ["Want to Read", "Want to Watch", "Want to Listen"];
-    const getBreakdown = (type) => {
-      const items = logs.filter(l => l.media_type === type && !queueTypes.includes(l.verdict) && l.verdict !== "Currently Reading");
-      return { 
-        total: items.length, 
-        liked: items.filter(l => (l.verdict || "").toLowerCase().includes("liked")).length, 
-        ok: items.filter(l => (l.verdict || "").toLowerCase().includes("ok")).length, 
-        no: items.filter(l => (l.verdict || "").toLowerCase().includes("didn't like") || (l.verdict || "").toLowerCase().includes("didnt like") || (l.verdict || "").toLowerCase().includes("not like")).length 
-      };
+    const categories = {
+      Book: { total: 0, liked: 0, ok: 0, no: 0 },
+      Movie: { total: 0, liked: 0, ok: 0, no: 0 },
+      Album: { total: 0, liked: 0, ok: 0, no: 0 },
+      active: 0,
+      queue: 0
     };
-    return { Book: getBreakdown("Book"), Movie: getBreakdown("Movie"), Album: getBreakdown("Album"), active: logs.filter(l => l.verdict === "Currently Reading").length, queue: logs.filter(l => queueTypes.includes(l.verdict)).length };
+
+    logs.forEach(log => {
+      const type = log.media_type;
+      const verdict = log.verdict;
+
+      if (verdict === "Currently Reading") {
+        categories.active++;
+      } else if (verdict && verdict.startsWith("Want to")) {
+        categories.queue++;
+      } else if (categories[type]) {
+        categories[type].total++;
+        if (verdict === "I liked it") categories[type].liked++;
+        else if (verdict === "It was ok") categories[type].ok++;
+        else if (verdict === "I didn't like it") categories[type].no++;
+      }
+    });
+
+    return categories;
   }, [logs]);
 
   const dateOptions = ["All", ...new Set(logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' })))];
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
-      const isQueue = ["Want to Read", "Want to Watch", "Want to Listen"].includes(log.verdict);
+      const isQueue = log.verdict && log.verdict.startsWith("Want to");
       const isActive = log.verdict === "Currently Reading";
       const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
       const yearWithBrackets = log.year_released ? `(${log.year_released})` : "";
@@ -238,9 +252,9 @@ export default function DidILikeItUltimate() {
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
-                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
-                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
+                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
+                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
+                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
                 </div>
               </div>
             );
