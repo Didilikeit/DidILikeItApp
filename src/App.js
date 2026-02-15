@@ -69,16 +69,21 @@ export default function DidILikeItUltimate() {
   const textareaRef = useRef(null);
   const listTopRef = useRef(null);
 
-  // --- THEME DEFINITION ---
+ // --- THEME DEFINITION ---
   const theme = {
-    bg: darkMode ? "#121212" : "#f4f4f4",
-    card: darkMode ? "#1e1e1e" : "#ffffff",
+    bg: darkMode ? "#000000" : "#f4f4f4", // Pure black
+    card: darkMode ? "#111111" : "#ffffff", // Deep grey cards
     text: darkMode ? "#e0e0e0" : "#333333",
-    border: darkMode ? "#2a2a2a" : "#000000",
-    input: darkMode ? "#2d2d2d" : "#ffffff",
-    subtext: darkMode ? "#999" : "#666",
-    statCard: darkMode ? "#252525" : "#ffffff"
+    border: darkMode ? "#222222" : "#000000", // Muted borders
+    input: darkMode ? "#1a1a1a" : "#ffffff",
+    subtext: darkMode ? "#888" : "#666",
+    statCard: darkMode ? "#161616" : "#ffffff"
   };
+
+  // This forces the literal browser window background to change
+  useEffect(() => {
+    document.body.style.backgroundColor = theme.bg;
+  }, [theme.bg]);
 
   // --- AUTH & DATA ---
   useEffect(() => {
