@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SUPABASE SETUP ---
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+// --- DUMMY SETUP FOR PREVIEW ---
+const SUPABASE_URL = "https://placeholder.supabase.co"; 
+const SUPABASE_ANON_KEY = "placeholder"; 
+const supabase = { 
+  auth: { getSession: () => Promise.resolve({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) },
+  from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) })
+};
 
 // --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING --- [cite: 3]
 const getHighlightedText = (content, term) => {
@@ -561,7 +564,7 @@ const smallBtn = {
               </form>
             ) : (
               <h3 style={{ margin: 0, fontSize: '18px' }}>
-                {customName ? `${customName}'s Stats` : "Your Stats"} 
+                {customName ? `${customName}'s stats` : "Your stats"} 
                 <button 
                   onClick={() => setIsEditingName(true)} 
                   style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px', fontSize: '14px' }}
@@ -709,25 +712,25 @@ const smallBtn = {
           <div style={{ display: 'flex', gap: '5px' }}>
             <button 
               onClick={() => {
-                if (mediaType === "Book") setVerdict("Currently Reading");
-                else if (mediaType === "Movie") setVerdict("Want to Watch");
-                else setVerdict("Want to Listen");
+                if (mediaType === "Book") setVerdict("Currently reading");
+                else if (mediaType === "Movie") setVerdict("Want to watch");
+                else setVerdict("Want to listen");
               }} 
               style={{ 
                 ...verdictBtn, 
                 flex: 1, 
-                background: (verdict === "Currently Reading" || verdict === "Want to Watch" || verdict === "Want to Listen") ? "#3498db" : theme.input, 
-                color: (verdict === "Currently Reading" || verdict === "Want to Watch" || verdict === "Want to Listen") ? "#fff" : theme.text 
+                background: (verdict === "Currently reading" || verdict === "Want to watch" || verdict === "Want to listen") ? "#3498db" : theme.input, 
+                color: (verdict === "Currently reading" || verdict === "Want to watch" || verdict === "Want to listen") ? "#fff" : theme.text 
               }}
             >
-              ⏳ {mediaType === "Book" ? "Reading Now" : (mediaType === "Movie" ? "Want to Watch" : "Want to Listen")}
+              ⏳ {mediaType === "Book" ? "Reading now" : (mediaType === "Movie" ? "Want to watch" : "Want to listen")}
             </button>
             {mediaType === "Book" && (
               <button 
-                onClick={() => setVerdict("Want to Read")} 
-                style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#9c27b0" : theme.input, color: verdict === "Want to Read" ? "#fff" : theme.text }}
+                onClick={() => setVerdict("Want to read")} 
+                style={{ ...verdictBtn, flex: 1, background: verdict === "Want to read" ? "#9c27b0" : theme.input, color: verdict === "Want to read" ? "#fff" : theme.text }}
               >
-                🔖 Want to Read
+                🔖 Want to read
               </button>
             )}
           </div>
