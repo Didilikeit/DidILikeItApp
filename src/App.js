@@ -133,7 +133,6 @@ export default function DidILikeItUltimate() {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
       
-      // Handle Password Reset Redirect
       if (event === "PASSWORD_RECOVERY") {
         const newPassword = prompt("Enter your new password:");
         if (newPassword) {
@@ -167,7 +166,7 @@ export default function DidILikeItUltimate() {
       if (error) {
         alert(error.message);
       } else if (data?.user && data?.session === null) {
-        setAuthMsg("Check your email to verify your account! (Check your spam folder just in case)");
+        setAuthMsg("Check your email to verify your account!");
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -182,19 +181,24 @@ export default function DidILikeItUltimate() {
       redirectTo: window.location.origin,
     });
     if (error) alert(error.message);
-    else alert("Reset email sent! Check your inbox.");
+    else alert("Reset email sent!");
   };
 
   const handleDeleteAccount = async () => {
-    const confirmWipe = window.confirm("This will permanently delete ALL your media logs. Your account login will remain until manually removed by the admin. Proceed?");
+    const confirmWipe = window.confirm(
+      "WARNING: This will permanently delete your account and ALL your media logs. This cannot be undone. Proceed?"
+    );
+    
     if (!confirmWipe) return;
 
     if (user) {
-      const { error } = await supabase.from("logs").delete().eq("user_id", user.id);
-      if (error) alert("Error wiping data: " + error.message);
-      else {
-        alert("All data wiped. To fully delete your account record, please contact the admin.");
-        fetchLogs(user);
+      const { error } = await supabase.rpc('delete_user_account');
+      if (error) {
+        alert("Error deleting account: " + error.message);
+      } else {
+        await supabase.auth.signOut();
+        alert("Your account and data have been permanently deleted.");
+        window.location.reload(); 
       }
     } else {
       localStorage.removeItem("guest_logs");
@@ -278,7 +282,6 @@ export default function DidILikeItUltimate() {
     link.href = url; link.download = "my-media-log.csv"; link.click();
   };
 
-  // --- STYLING HELPERS ---
   const getMediaStyle = (type) => {
     switch(type) {
       case 'Book': return { color: '#3498db', icon: '📖', creatorLabel: 'Author' };
@@ -416,9 +419,14 @@ export default function DidILikeItUltimate() {
           <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
             <i> What are you reading at the moment? Watched anything good lately? Have you heard their new album? <br /><br /> Did you like it?</i> <br /><br /> Well, you've got no excuse not to answer now. You're welcome.
           </p>
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export CSV</button>
-            <button onClick={handleDeleteAccount} style={{ ...smallBtn, color: "#e74c3c", fontWeight: "bold", padding: 0 }}>🗑️ Delete Account</button>
+            <button 
+              onClick={handleDeleteAccount} 
+              style={{ ...smallBtn, color: "#ff4d4d", fontWeight: "bold", border: "1px solid #ff4d4d", padding: "5px 10px", borderRadius: "8px" }}
+            >
+              ⚠️ Permanently Delete Account
+            </button>
           </div>
         </div>
       )}
@@ -505,7 +513,6 @@ export default function DidILikeItUltimate() {
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
       </div>
 
-      {/* FILTER TABS */}
       <div ref={listTopRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: darkMode ? "#333" : "#eee", borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{tab}</button>
@@ -521,7 +528,6 @@ export default function DidILikeItUltimate() {
         </select>
       </div>
 
-      {/* LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const m = getMediaStyle(log.media_type);
