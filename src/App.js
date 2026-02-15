@@ -147,6 +147,7 @@ const [filterMonth, setFilterMonth] = useState("All");
   }, [darkMode]);
 
   useEffect(() => {
+    // 1. Initial check when the app first loads
     supabase.auth.getSession().then(({ data: { session } }) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
@@ -154,25 +155,24 @@ const [filterMonth, setFilterMonth] = useState("All");
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // 2. Listen for Login/Logout events
+const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
-      setUser(activeUser);
       
-      if (event === "PASSWORD_RECOVERY") {
-        const newPassword = prompt("Enter your new password:");
-        if (newPassword) {
-          const { error } = await supabase.auth.updateUser({ password: newPassword });
-          if (error) alert(error.message);
-          else alert("Password updated successfully!");
-        }
-      }
-
       if (activeUser) {
+        setUser(activeUser);
         setShowAuthModal(false);
-        setAuthMsg(""); 
-        mergeGuestData(activeUser.id);
+        setAuthMsg("");
+        await fetchLogs(activeUser);
+        await mergeGuestData(activeUser.id);
       } else {
+        setUser(null);
         fetchLogs(null);
+
+        // NEW: Show alert only when the user explicitly logs out
+        if (event === 'SIGNED_OUT') {
+          alert("You have been logged out.");
+        }
       }
     });
 
