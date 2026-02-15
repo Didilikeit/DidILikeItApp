@@ -269,9 +269,15 @@ export default function DidILikeItUltimate() {
 
       {showAbout && (
         <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid #3498db`, marginBottom: "25px", boxShadow: `4px 4px 0px #3498db` }}>
-          <p style={{ fontSize: "15px", margin: "0 0 15px 0", lineHeight: "1.4" }}>
-            This is a tool to track the media you've consumed and whether you liked it or not.
-          </p>
+          <p style={{ fontSize: "16px", margin: "0 0 10px 0", fontWeight: "bold" }}>
+      What are you reading at the moment? Watched anything good lately? Have you heard their new album?
+    </p>
+    <p style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "900", color: "#3498db" }}>
+      Did you like it?
+    </p>
+    <p style={{ fontSize: "14px", margin: "0 0 20px 0", fontStyle: "italic", color: theme.subtext }}>
+      You've got no excuse not to answer now. You're welcome.
+    </p>
           <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
         </div>
       )}
