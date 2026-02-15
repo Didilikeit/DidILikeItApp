@@ -14,12 +14,9 @@ const ExpandableNote = ({ text, isDarkMode }) => {
 
   return (
     <div style={{ 
-      marginTop: "10px", 
-      padding: "12px", 
+      marginTop: "10px", padding: "12px", 
       background: isDarkMode ? "#2d2d2d" : "#f9f9f9", 
-      borderRadius: "8px", 
-      fontSize: "14px", 
-      fontStyle: "italic", 
+      borderRadius: "8px", fontSize: "14px", fontStyle: "italic", 
       borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
       color: isDarkMode ? "#bbb" : "#555"
     }}>
@@ -41,6 +38,10 @@ export default function DidILikeItUltimate() {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   const [darkMode, setDarkMode] = useState(localStorage.getItem("dark_mode") === "true");
+  
+  // Auth Modal State
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
   // Form State
   const [title, setTitle] = useState("");
@@ -52,18 +53,13 @@ export default function DidILikeItUltimate() {
   const [manualDate, setManualDate] = useState("");
   const [editingId, setEditingId] = useState(null);
 
-  // UI/Filter State
+  // UI State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
-  const [filterDate, setFilterDate] = useState("All");
-  const [statYearFilter, setStatYearFilter] = useState(new Date().getFullYear().toString());
   const [viewMode, setViewMode] = useState("History"); 
   const [showAbout, setShowAbout] = useState(false);
-  const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
-  const [isEditingName, setIsEditingName] = useState(false);
 
   const textareaRef = useRef(null);
-  const listTopRef = useRef(null);
 
   const theme = {
     bg: darkMode ? "#000000" : "#f4f4f4",
@@ -79,87 +75,112 @@ export default function DidILikeItUltimate() {
     document.body.style.backgroundColor = theme.bg;
   }, [theme.bg]);
 
-  useEffect(() => {
-    localStorage.setItem("dark_mode", darkMode);
-  }, [darkMode]);
+  // --- LOG FETCHING ---
+  const fetchLogs = useCallback(async (currentUser) => {
+    if (!currentUser) {
+      const localData = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+      setLogs(localData);
+      return;
+    }
+    const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
+    if (!error) setLogs(data || []);
+  }, []);
 
-  // --- AUTH SESSION & LISTENER ---
+  // --- DATA MERGE LOGIC ---
+  const mergeGuestData = useCallback(async (userId) => {
+    const localData = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+    if (localData.length === 0) return;
+
+    // Prepare data for Supabase (removing temporary guest IDs)
+    const logsToUpload = localData.map(({ id, ...rest }) => ({
+      ...rest,
+      user_id: userId
+    }));
+
+    const { error } = await supabase.from("logs").insert(logsToUpload);
+    
+    if (!error) {
+      console.log("Guest data merged successfully");
+      localStorage.removeItem("guest_logs"); // Clean up
+      fetchLogs(userId); // Refresh from DB
+    } else {
+      console.error("Merge error:", error.message);
+    }
+  }, [fetchLogs]);
+
+  // --- AUTH INITIALIZATION ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const activeUser = session?.user ?? null;
+      setUser(activeUser);
+      fetchLogs(activeUser);
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const activeUser = session?.user ?? null;
+      setUser(activeUser);
+      if (activeUser) {
+        setShowAuthModal(false);
+        mergeGuestData(activeUser.id);
+      } else {
+        fetchLogs(null);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchLogs, mergeGuestData]);
 
-  const fetchLogs = useCallback(async () => {
-    if (!user) return;
-    const { data, error } = await supabase.from("logs").select("*").order("logged_at", { ascending: false });
-    if (!error) setLogs(data || []);
-  }, [user]);
-
-  useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "60px";
-      textarea.style.height = textarea.scrollHeight + "px";
-    }
-  }, [notes]);
-
-  const handleStatClick = (type, mode = "History") => {
-    setFilterMedium(type);
-    setViewMode(mode);
-    setSearchTerm("");
-    setTimeout(() => listTopRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    const { error } = isSignUp 
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message);
   };
 
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
+    
     const logData = { 
       title: title.trim(), creator: creator.trim(), notes: notes.trim(), 
-      media_type: mediaType, verdict, year_released: year || null, user_id: user.id,
-      ...(manualDate && { logged_at: new Date(manualDate).toISOString() })
+      media_type: mediaType, verdict, year_released: year || null,
+      logged_at: manualDate ? new Date(manualDate).toISOString() : new Date().toISOString()
     };
-    const { error } = editingId 
-      ? await supabase.from("logs").update(logData).eq("id", editingId)
-      : await supabase.from("logs").insert([logData]);
-    
-    if (error) alert(error.message);
-    else {
-      setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
-      setEditingId(null); fetchLogs();
+
+    if (user) {
+      const { error } = editingId 
+        ? await supabase.from("logs").update(logData).eq("id", editingId)
+        : await supabase.from("logs").insert([{ ...logData, user_id: user.id }]);
+      if (error) alert(error.message);
+    } else {
+      let currentLogs = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+      if (editingId) {
+        currentLogs = currentLogs.map(l => l.id === editingId ? { ...logData, id: editingId } : l);
+      } else {
+        currentLogs.unshift({ ...logData, id: Date.now().toString() });
+      }
+      localStorage.setItem("guest_logs", JSON.stringify(currentLogs));
     }
+    
+    setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
+    setEditingId(null); fetchLogs(user);
   };
 
   const deleteLog = async (id) => {
-    if (window.confirm("Permanently delete this entry?")) {
+    if (!window.confirm("Delete this entry?")) return;
+    if (user) {
       await supabase.from("logs").delete().eq("id", id);
-      fetchLogs();
+    } else {
+      const currentLogs = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+      localStorage.setItem("guest_logs", JSON.stringify(currentLogs.filter(l => l.id !== id)));
     }
+    fetchLogs(user);
   };
 
-  const saveName = () => {
-    localStorage.setItem("user_custom_name", customName);
-    setIsEditingName(false);
-  };
-
-  const exportCSV = () => {
-    const headers = ["Title", "Creator", "Type", "Verdict", "Year", "Notes", "Date"];
-    const rows = logs.map(l => [`"${l.title}"`, `"${l.creator}"`, l.media_type, l.verdict, l.year_released || "", `"${l.notes.replace(/"/g, '""')}"`, new Date(l.logged_at).toLocaleDateString()]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = "my-media-log.csv"; link.click();
-  };
-
+  // --- UI HELPERS ---
   const getMediaStyle = (type) => {
     switch(type) {
       case 'Book': return { color: '#3498db', icon: '📖', creatorLabel: 'Author' };
@@ -169,247 +190,101 @@ export default function DidILikeItUltimate() {
     }
   };
 
-  const getVerdictStyle = (v) => {
-    const isDark = darkMode;
-    switch(v) {
-      case "I liked it": 
-        return { bg: isDark ? "rgba(76, 175, 80, 0.2)" : "#e8f5e9", color: isDark ? "#81c784" : "#2e7d32", border: isDark ? "#4caf50" : "#c8e6c9", emoji: "🟢" };
-      case "It was ok": 
-        return { bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", color: isDark ? "#ffb74d" : "#ef6c00", border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" };
-      case "I didn't like it": 
-        return { bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", color: isDark ? "#e57373" : "#c62828", border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" };
-      case "Currently Reading": 
-        return { bg: isDark ? "rgba(3, 169, 244, 0.2)" : "#e1f5fe", color: isDark ? "#4fc3f7" : "#01579b", border: isDark ? "#03a9f4" : "#b3e5fc", emoji: "📖" };
-      default:
-        if (v && v.startsWith("Want to")) {
-          return { bg: isDark ? "rgba(156, 39, 176, 0.2)" : "#f3e5f5", color: isDark ? "#ce93d8" : "#4a148c", border: isDark ? "#9c27b0" : "#e1bee7", emoji: "⏳" };
-        }
-        return { bg: isDark ? "#333" : "#f0f0f0", color: isDark ? "#bbb" : "#555", border: isDark ? "#444" : "#ddd", emoji: "⚪" };
-    }
-  };
-
-  const availableYears = useMemo(() => {
-    const years = logs.map(l => new Date(l.logged_at).getFullYear().toString());
-    return ["All", ...new Set(years)].sort((a, b) => b - a);
-  }, [logs]);
-
-  const stats = useMemo(() => {
-    const categories = {
-      Book: { total: 0, liked: 0, ok: 0, no: 0 },
-      Movie: { total: 0, liked: 0, ok: 0, no: 0 },
-      Album: { total: 0, liked: 0, ok: 0, no: 0 },
-      active: 0, queue: 0
-    };
-    logs.forEach(log => {
-      const logYear = new Date(log.logged_at).getFullYear().toString();
-      if (statYearFilter !== "All" && logYear !== statYearFilter) return;
-      if (log.verdict === "Currently Reading") categories.active++;
-      else if (log.verdict?.startsWith("Want to")) categories.queue++;
-      else if (categories[log.media_type]) {
-        categories[log.media_type].total++;
-        if (log.verdict === "I liked it") categories[log.media_type].liked++;
-        else if (log.verdict === "It was ok") categories[log.media_type].ok++;
-        else if (log.verdict === "I didn't like it") categories[log.media_type].no++;
-      }
-    });
-    return categories;
-  }, [logs, statYearFilter]);
-
-  const dateOptions = ["All", ...new Set(logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' })))];
-
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
-      const isQueue = log.verdict && log.verdict.startsWith("Want to");
+      const isQueue = log.verdict?.startsWith("Want to");
       const isActive = log.verdict === "Currently Reading";
-      const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
-      const searchable = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${logMonthYear}`.toLowerCase();
+      const searchable = `${log.title} ${log.creator} ${log.notes}`.toLowerCase();
       const matchesSearch = searchable.includes(searchTerm.toLowerCase());
       const matchesMedium = filterMedium === "All" || log.media_type === filterMedium;
-      const matchesDate = filterDate === "All" || logMonthYear === filterDate;
       let matchesView = searchTerm.length > 0;
       if (!matchesView) {
         if (viewMode === "Reading") matchesView = isActive;
         else if (viewMode === "Queue") matchesView = isQueue;
         else matchesView = !isActive && !isQueue;
       }
-      return matchesSearch && matchesMedium && matchesDate && matchesView;
+      return matchesSearch && matchesMedium && matchesView;
     });
-  }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
+  }, [logs, searchTerm, filterMedium, viewMode]);
 
-  // --- RENDERING ---
-  if (loading) return <div style={{ textAlign: "center", padding: "50px", background: theme.bg, color: theme.text, minHeight: "100vh" }}>Loading...</div>;
-
-  // --- LOGIN PAGE ---
-  if (!user) {
-    return (
-      <div style={{ padding: "60px 20px", textAlign: "center", background: theme.bg, minHeight: "100vh", color: theme.text, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <h2 style={{ fontSize: "32px", marginBottom: "10px" }}>🤔 Did I Like It?</h2>
-        <p style={{ color: theme.subtext, marginBottom: "40px" }}>Your personal media diary.</p>
-        
-        <div style={{ background: theme.card, padding: "30px", borderRadius: "20px", border: `1px solid ${theme.border}`, width: "100%", maxWidth: "320px" }}>
-           <button 
-             onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-             style={{ ...primaryBtn, background: "#fff", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}
-           >
-             Continue with Google
-           </button>
-           <p style={{ fontSize: "12px", marginTop: "20px", color: theme.subtext }}>
-             Sign in to sync your books, movies, and albums across devices.
-           </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   return (
-    <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif", backgroundColor: theme.bg, color: theme.text, minHeight: "100vh", transition: "0.2s all" }}>
+    <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", backgroundColor: theme.bg, color: theme.text, minHeight: "100vh" }}>
+      
+      {/* HEADER */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: 0, fontSize: "28px" }}>🤔 Did I Like It?</h2>
-        <div style={{ display: "flex", justifyContent: "center", gap: "15px", marginTop: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginTop: "12px" }}>
           <button onClick={() => setDarkMode(!darkMode)} style={smallBtn}>{darkMode ? "☀️ Light" : "🌙 Dark"}</button>
-          <button onClick={() => setShowAbout(!showAbout)} style={smallBtn}>{showAbout ? "Close" : "About"}</button>
-          <button onClick={() => supabase.auth.signOut()} style={smallBtn}>Logout</button>
+          <button onClick={() => setShowAbout(!showAbout)} style={smallBtn}>About</button>
+          {user ? (
+            <button onClick={() => supabase.auth.signOut()} style={smallBtn}>Logout</button>
+          ) : (
+            <button onClick={() => setShowAuthModal(true)} style={{ ...smallBtn, color: "#3498db", fontWeight: "bold" }}>☁️ Sync Account</button>
+          )}
         </div>
       </div>
 
-      {showAbout && (
-        <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${darkMode ? "#1a4a6e" : "#3498db"}`, marginBottom: "25px", lineHeight: "1.5" }}>
-          <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
-            <i>What are you reading at the moment? Watched anything good lately? Have you heard their new album?<br /><br />Did you like it?</i>
-            <br /><br />
-            Well, you've got no excuse not to answer now. You're welcome.
-          </p>
-          <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
+      {/* AUTH MODAL */}
+      {showAuthModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ background: theme.card, padding: "30px", borderRadius: "20px", width: "100%", maxWidth: "340px", border: `1px solid ${theme.border}` }}>
+            <h3 style={{ textAlign: "center", marginBottom: "10px" }}>{isSignUp ? "Create Account" : "Welcome Back"}</h3>
+            <p style={{ fontSize: "12px", textAlign: "center", color: theme.subtext, marginBottom: "20px" }}>
+              {logs.length > 0 && !user ? "Your guest logs will be moved to your account." : "Access your logs on any device."}
+            </p>
+            
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} style={{ ...primaryBtn, background: "#fff", color: "#000", marginBottom: "20px" }}>Continue with Google</button>
+            <div style={{ textAlign: "center", fontSize: "11px", color: theme.subtext, margin: "10px 0" }}>OR</div>
+            <form onSubmit={handleAuth}>
+              <input name="email" type="email" placeholder="Email" required style={{ ...inputStyle, background: theme.input, color: theme.text }} />
+              <input name="password" type="password" placeholder="Password" required style={{ ...inputStyle, background: theme.input, color: theme.text }} />
+              <button type="submit" style={{ ...primaryBtn, background: "#3498db", color: "#fff" }}>{isSignUp ? "Sign Up" : "Login"}</button>
+            </form>
+            <button onClick={() => setIsSignUp(!isSignUp)} style={{ ...smallBtn, display: "block", margin: "15px auto 0", color: "#3498db" }}>{isSignUp ? "Switch to Login" : "Switch to Sign Up"}</button>
+            <button onClick={() => setShowAuthModal(false)} style={{ ...smallBtn, display: "block", margin: "20px auto 0" }}>Close</button>
+          </div>
         </div>
       )}
 
-      {/* STATS DASHBOARD */}
-      <div style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              {isEditingName ? (
-                <div style={{ display: 'flex', gap: '5px' }}>
-                  <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px', width: '120px' }} />
-                  <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px' }}>✓</button>
-                </div>
-              ) : (
-                <h3 style={{ margin: 0, fontSize: '18px' }}>
-                  {customName ? `${customName}'s Stats` : "Your Stats"} 
-                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', marginLeft: '8px', cursor: "pointer" }}>✏️</button>
-                </h3>
-              )}
-            </div>
-            <select value={statYearFilter} onChange={(e) => setStatYearFilter(e.target.value)} style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
-              {availableYears.map(y => <option key={y} value={y}>{y === "All" ? "All Time" : y}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-             <button onClick={() => handleStatClick("All", "Reading")} style={{ ...pillBtn, background: darkMode ? "#1b3341" : "#e1f5fe", color: darkMode ? "#4fc3f7" : "#01579b" }}>📖 {stats.active}</button>
-             <button onClick={() => handleStatClick("All", "Queue")} style={{ ...pillBtn, background: darkMode ? "#331b41" : "#f3e5f5", color: darkMode ? "#ce93d8" : "#4a148c" }}>⏳ {stats.queue}</button>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {["Book", "Movie", "Album"].map(type => {
-            const m = getMediaStyle(type);
-            const s = stats[type];
-            return (
-              <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button onClick={() => handleStatClick(type, "History")} style={{ background: theme.statCard, padding: '10px', borderRadius: '12px 12px 4px 4px', border: `2px solid ${darkMode ? "#333" : "#eee"}`, borderBottom: 'none', color: theme.text, cursor: "pointer" }}>
-                  <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {type}s</div>
-                  <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
-                </button>
-                <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div style={{ flex: s.liked || 1, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}`, borderRadius: '0 0 0 8px', fontSize: '11px', color: getVerdictStyle("I liked it").color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.liked || ""}</div>
-                  <div style={{ flex: s.ok || 1, background: getVerdictStyle("It was ok").bg, border: `1px solid ${getVerdictStyle("It was ok").border}`, fontSize: '11px', color: getVerdictStyle("It was ok").color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.ok || ""}</div>
-                  <div style={{ flex: s.no || 1, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0', fontSize: '11px', color: getVerdictStyle("I didn't like it").color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.no || ""}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* ENTRY FORM */}
-      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: darkMode ? "0 4px 20px rgba(0,0,0,0.5)" : `5px 5px 0px ${theme.border}` }}>
+      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px" }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
-            <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : (darkMode ? "#333" : "#eee"), color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold", cursor: "pointer" }}>{t}</button>
+            <button key={t} onClick={() => setMediaType(t)} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : theme.input, color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold" }}>{t}</button>
           ))}
         </div>
-        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
-        <div style={{ display: "flex", gap: "10px" }}>
-          <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
-          <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text }} />
+        <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text }} />
+        <div style={{ display: 'flex', gap: '5px' }}>
+          {["I liked it", "It was ok", "I didn't like it"].map(v => (
+            <button key={v} onClick={() => setVerdict(v)} style={{ ...verdictBtn, flex: 1, background: verdict === v ? "#3498db" : theme.input, color: verdict === v ? "#fff" : theme.text, borderColor: verdict === v ? "#3498db" : "#333" }}>{v}</button>
+          ))}
         </div>
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ fontSize: "11px", color: theme.subtext, fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
-          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px", background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
-        </div>
-        <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", height: "60px", resize: "none", overflow: "hidden" }} />
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {mediaType === "Book" ? (
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : theme.input, color: verdict === "Currently Reading" ? "#fff" : theme.text }}>📖 Reading Now</button>
-              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : theme.input, color: verdict === "Want to Read" ? "#fff" : theme.text }}>🔖 Want to Read</button>
-            </div>
-          ) : (
-            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : theme.input, color: verdict.includes("Want") ? "#fff" : theme.text }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
-          )}
-          <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : theme.input, color: verdict === "It was ok" ? "#fff" : theme.text }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text }}>🔴 I didn't like it</button>
-          </div>
-        </div>
-        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
+        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "15px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "Update" : "Save Entry"}</button>
       </div>
 
       {/* FILTER TABS */}
-      <div ref={listTopRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: darkMode ? "#333" : "#eee", borderRadius: '12px', padding: '4px' }}>
-        {["History", "Reading", "Queue"].map((tab) => (
-          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: "bold", cursor: "pointer" }}>{tab}</button>
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
+        {["History", "Reading", "Queue"].map(tab => (
+          <button key={tab} onClick={() => setViewMode(tab)} style={{ ...smallBtn, flex: 1, padding: "8px", borderRadius: "8px", background: viewMode === tab ? theme.card : "transparent", fontWeight: viewMode === tab ? "bold" : "normal", border: viewMode === tab ? `1px solid ${theme.border}` : "none" }}>{tab}</button>
         ))}
       </div>
-      
-      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", borderRadius: "25px", paddingLeft: "20px" }} />
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
-            <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
-        </select>
-        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
-            {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
-        </select>
-      </div>
 
-      {/* HISTORY LIST */}
+      {/* LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredLogs.map((log) => {
           const m = getMediaStyle(log.media_type);
-          const v = getVerdictStyle(log.verdict);
-          const dateStr = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-          
           return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: `2px solid ${darkMode ? "#333" : "#eee"}`, borderLeft: `6px solid ${m.color}`, background: theme.card }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
+            <div key={log.id} style={{ padding: "15px", borderRadius: "12px", borderLeft: `6px solid ${m.color}`, background: theme.card }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {log.media_type.toUpperCase()}</span>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", margin: "4px 0" }}>{log.title}</div>
-                  <div style={{ fontSize: "14px", color: theme.subtext }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{dateStr} {log.year_released && `• (${log.year_released})`}</div>
+                  <div style={{ fontSize: "16px", fontWeight: "bold" }}>{log.title}</div>
+                  <div style={{ fontSize: "13px", color: theme.subtext }}>{log.creator}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', background: v.bg, color: v.color, border: `1px solid ${v.border}`, marginBottom: '10px', display: 'inline-block' }}>
-                    {v.emoji} {log.verdict}
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ ...smallBtn, color: "#3498db" }}>Edit</button>
-                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: '#e74c3c' }}>Delete</button>
-                  </div>
-                </div>
+                <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: '#e74c3c' }}>Delete</button>
               </div>
-              {log.notes && <ExpandableNote text={log.notes} isDarkMode={darkMode} />}
             </div>
           );
         })}
@@ -418,8 +293,7 @@ export default function DidILikeItUltimate() {
   );
 }
 
-const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box", outline: "none" };
-const primaryBtn = { width: "100%", padding: "16px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
-const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
+const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #333", fontSize: "14px", boxSizing: "border-box" };
+const primaryBtn = { width: "100%", padding: "14px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer" };
+const verdictBtn = { padding: "8px", borderRadius: "8px", border: "1px solid #333", cursor: "pointer", fontSize: '11px' };
 const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "inherit" };
-const pillBtn = { border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '12px' };
