@@ -74,7 +74,7 @@ export default function DidILikeItUltimate() {
     bg: darkMode ? "#121212" : "#f4f4f4",
     card: darkMode ? "#1e1e1e" : "#ffffff",
     text: darkMode ? "#e0e0e0" : "#333333",
-    border: darkMode ? "#333333" : "#000000",
+    border: darkMode ? "#2a2a2a" : "#000000",
     input: darkMode ? "#2d2d2d" : "#ffffff",
     subtext: darkMode ? "#999" : "#666",
     statCard: darkMode ? "#252525" : "#ffffff"
@@ -324,7 +324,8 @@ export default function DidILikeItUltimate() {
       </div>
 
       {/* ENTRY FORM */}
-      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: `5px 5px 0px ${theme.border}` }}>
+      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: darkMode ? "none" : `5px 5px 0px ${theme.border}` 
+}}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
             <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : (darkMode ? "#333" : "#eee"), color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold", cursor: "pointer" }}>{t}</button>
@@ -414,7 +415,16 @@ export default function DidILikeItUltimate() {
   );
 }
 
-const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box" };
+const inputStyle = { 
+  width: "100%", 
+  padding: "12px", 
+  marginBottom: "10px", 
+  borderRadius: "8px", 
+  border: "1px solid #ddd", 
+  fontSize: "14px", 
+  boxSizing: "border-box",
+  outline: "none" // Prevents the bright browser outline on tap
+};
 const primaryBtn = { width: "100%", padding: "16px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
 const smallBtn = { 
