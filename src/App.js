@@ -134,16 +134,22 @@ export default function DidILikeItUltimate() {
   };
 
   const getVerdictStyle = (v) => {
-    // Explicit matching for your requested categories
-    if (v === "I liked it") return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
-    if (v === "It was ok") return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
-    if (v === "I didn't like it") return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
-    
-    // Status-based matching
-    if (v === "Currently Reading") return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
-    if (v && v.startsWith("Want to")) return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
-    
-    return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
+    switch(v) {
+      case "I liked it": 
+        return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
+      case "It was ok": 
+        return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
+      case "I didn't like it": 
+        return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+      case "Currently Reading": 
+        return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
+      default:
+        // This covers the "Want to..." queue labels
+        if (v && v.startsWith("Want to")) {
+          return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
+        }
+        return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
+    }
   };
 
   // --- MEMOIZED DATA (REBUILT FROM SCRATCH) ---
@@ -158,17 +164,22 @@ export default function DidILikeItUltimate() {
 
     logs.forEach(log => {
       const type = log.media_type;
-      const verdict = log.verdict;
+      const v = log.verdict; // The exact string from the button saved in your DB
 
-      if (verdict === "Currently Reading") {
+      if (v === "Currently Reading") {
         categories.active++;
-      } else if (verdict && verdict.startsWith("Want to")) {
+      } else if (v === "Want to Read" || v === "Want to Watch" || v === "Want to Listen") {
         categories.queue++;
       } else if (categories[type]) {
         categories[type].total++;
-        if (verdict === "I liked it") categories[type].liked++;
-        else if (verdict === "It was ok") categories[type].ok++;
-        else if (verdict === "I didn't like it") categories[type].no++;
+        // Strict matching to button labels
+        if (v === "I liked it") {
+          categories[type].liked++;
+        } else if (v === "It was ok") {
+          categories[type].ok++;
+        } else if (v === "I didn't like it") {
+          categories[type].no++;
+        }
       }
     });
 
