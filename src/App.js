@@ -324,7 +324,7 @@ export default function DidILikeItUltimate() {
       </div>
 
       {/* ENTRY FORM */}
-      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: darkMode ? "none" : `5px 5px 0px ${theme.border}` 
+      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: darkMode ? "0 4px 20px rgba(0,0,0,0.5)" : `5px 5px 0px ${theme.border}` 
 }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
