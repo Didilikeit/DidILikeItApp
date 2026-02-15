@@ -58,6 +58,7 @@ export default function DidILikeItUltimate() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
+  const [statYearFilter, setStatYearFilter] = useState(new Date().getFullYear().toString()); // Stats Year Filter
   const [viewMode, setViewMode] = useState("History"); 
   const [showAbout, setShowAbout] = useState(false);
   
@@ -101,7 +102,6 @@ export default function DidILikeItUltimate() {
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
 
-  // Auto-expand thoughts box
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -111,7 +111,6 @@ export default function DidILikeItUltimate() {
     }
   }, [notes]);
 
-  // --- LOGIC: CLICKABLE STATS & SCROLL ---
   const handleStatClick = (type, mode = "History") => {
     setFilterMedium(type);
     setViewMode(mode);
@@ -119,7 +118,6 @@ export default function DidILikeItUltimate() {
     setTimeout(() => listTopRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
-  // --- ACTIONS ---
   const handleSave = async () => {
     if (!title || !verdict) return alert("Title and Verdict required!");
     const logData = { 
@@ -174,41 +172,28 @@ export default function DidILikeItUltimate() {
     const isDark = darkMode;
     switch(v) {
       case "I liked it": 
-        return { 
-          bg: isDark ? "rgba(76, 175, 80, 0.2)" : "#e8f5e9", 
-          color: isDark ? "#81c784" : "#2e7d32", 
-          border: isDark ? "#4caf50" : "#c8e6c9", emoji: "🟢" 
-        };
+        return { bg: isDark ? "rgba(76, 175, 80, 0.2)" : "#e8f5e9", color: isDark ? "#81c784" : "#2e7d32", border: isDark ? "#4caf50" : "#c8e6c9", emoji: "🟢" };
       case "It was ok": 
-        return { 
-          bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", 
-          color: isDark ? "#ffb74d" : "#ef6c00", 
-          border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" 
-        };
+        return { bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", color: isDark ? "#ffb74d" : "#ef6c00", border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" };
       case "I didn't like it": 
-        return { 
-          bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", 
-          color: isDark ? "#e57373" : "#c62828", 
-          border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" 
-        };
+        return { bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", color: isDark ? "#e57373" : "#c62828", border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" };
       case "Currently Reading": 
-        return { 
-          bg: isDark ? "rgba(3, 169, 244, 0.2)" : "#e1f5fe", 
-          color: isDark ? "#4fc3f7" : "#01579b", 
-          border: isDark ? "#03a9f4" : "#b3e5fc", emoji: "📖" 
-        };
+        return { bg: isDark ? "rgba(3, 169, 244, 0.2)" : "#e1f5fe", color: isDark ? "#4fc3f7" : "#01579b", border: isDark ? "#03a9f4" : "#b3e5fc", emoji: "📖" };
       default:
         if (v && v.startsWith("Want to")) {
-          return { 
-            bg: isDark ? "rgba(156, 39, 176, 0.2)" : "#f3e5f5", 
-            color: isDark ? "#ce93d8" : "#4a148c", 
-            border: isDark ? "#9c27b0" : "#e1bee7", emoji: "⏳" 
-          };
+          return { bg: isDark ? "rgba(156, 39, 176, 0.2)" : "#f3e5f5", color: isDark ? "#ce93d8" : "#4a148c", border: isDark ? "#9c27b0" : "#e1bee7", emoji: "⏳" };
         }
         return { bg: isDark ? "#333" : "#f0f0f0", color: isDark ? "#bbb" : "#555", border: isDark ? "#444" : "#ddd", emoji: "⚪" };
     }
   };
 
+  // --- DYNAMIC YEAR LIST FOR STATS ---
+  const availableYears = useMemo(() => {
+    const years = logs.map(l => new Date(l.logged_at).getFullYear().toString());
+    return ["All", ...new Set(years)].sort((a, b) => b - a);
+  }, [logs]);
+
+  // --- MEMOIZED STATS (FILTERED BY statYearFilter) ---
   const stats = useMemo(() => {
     const categories = {
       Book: { total: 0, liked: 0, ok: 0, no: 0 },
@@ -218,10 +203,16 @@ export default function DidILikeItUltimate() {
     };
 
     logs.forEach(log => {
-      const type = log.media_type;
+      const logYear = new Date(log.logged_at).getFullYear().toString();
       const v = log.verdict;
+      const type = log.media_type;
+
+      // Queue and Active items are usually "global", but we can filter them too if desired. 
+      // Here we filter everything by the year selected.
+      if (statYearFilter !== "All" && logYear !== statYearFilter) return;
+
       if (v === "Currently Reading") categories.active++;
-      else if (v === "Want to Read" || v === "Want to Watch" || v === "Want to Listen") categories.queue++;
+      else if (v?.startsWith("Want to")) categories.queue++;
       else if (categories[type]) {
         categories[type].total++;
         if (v === "I liked it") categories[type].liked++;
@@ -230,7 +221,7 @@ export default function DidILikeItUltimate() {
       }
     });
     return categories;
-  }, [logs]);
+  }, [logs, statYearFilter]);
 
   const dateOptions = ["All", ...new Set(logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' })))];
 
@@ -281,20 +272,31 @@ export default function DidILikeItUltimate() {
 
       {/* STATS DASHBOARD */}
       <div style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            {isEditingName ? (
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px' }} placeholder="Enter Name" />
-                <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px', cursor: 'pointer' }}>✓</button>
-              </div>
-            ) : (
-              <h3 style={{ margin: 0 }}>
-                {customName ? `${customName}'s Stats` : "Your Stats"} 
-                <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', marginLeft: '8px' }}>✏️</button>
-              </h3>
-            )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              {isEditingName ? (
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px', width: '120px' }} placeholder="Name" />
+                  <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px', cursor: 'pointer' }}>✓</button>
+                </div>
+              ) : (
+                <h3 style={{ margin: 0, fontSize: '18px' }}>
+                  {customName ? `${customName}'s Stats` : "Your Stats"} 
+                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', marginLeft: '8px' }}>✏️</button>
+                </h3>
+              )}
+            </div>
+            {/* YEAR SELECTOR FOR STATS */}
+            <select 
+              value={statYearFilter} 
+              onChange={(e) => setStatYearFilter(e.target.value)}
+              style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', outline: 'none', padding: 0, marginTop: '4px' }}
+            >
+              {availableYears.map(y => <option key={y} value={y}>{y === "All" ? "All Time" : y}</option>)}
+            </select>
           </div>
+          
           <div style={{ display: 'flex', gap: '8px' }}>
              <button onClick={() => handleStatClick("All", "Reading")} style={{ ...pillBtn, background: darkMode ? "#1b3341" : "#e1f5fe", color: darkMode ? "#4fc3f7" : "#01579b" }}>📖 {stats.active}</button>
              <button onClick={() => handleStatClick("All", "Queue")} style={{ ...pillBtn, background: darkMode ? "#331b41" : "#f3e5f5", color: darkMode ? "#ce93d8" : "#4a148c" }}>⏳ {stats.queue}</button>
@@ -311,9 +313,9 @@ export default function DidILikeItUltimate() {
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div style={{ flex: s.liked || 1, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}`, borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I liked it").color }}>{s.liked || ""}</div>
-                  <div style={{ flex: s.ok || 1, background: getVerdictStyle("It was ok").bg, border: `1px solid ${getVerdictStyle("It was ok").border}`, fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("It was ok").color }}>{s.ok || ""}</div>
-                  <div style={{ flex: s.no || 1, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I didn't like it").color }}>{s.no || ""}</div>
+                  <div title="Liked" style={{ flex: s.liked || 1, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}`, borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I liked it").color }}>{s.liked || ""}</div>
+                  <div title="Ok" style={{ flex: s.ok || 1, background: getVerdictStyle("It was ok").bg, border: `1px solid ${getVerdictStyle("It was ok").border}`, fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("It was ok").color }}>{s.ok || ""}</div>
+                  <div title="No" style={{ flex: s.no || 1, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I didn't like it").color }}>{s.no || ""}</div>
                 </div>
               </div>
             );
@@ -412,7 +414,6 @@ export default function DidILikeItUltimate() {
   );
 }
 
-// --- REUSABLE STYLES ---
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box" };
 const primaryBtn = { width: "100%", padding: "16px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
