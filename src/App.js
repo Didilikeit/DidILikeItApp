@@ -146,12 +146,22 @@ const [filterMonth, setFilterMonth] = useState("All");
   }, [darkMode]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const activeUser = session?.user ?? null;
-      setUser(activeUser);
-      fetchLogs(activeUser);
-      setLoading(false);
-    });
+    // Initial Session Check
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const activeUser = session?.user ?? null;
+        setUser(activeUser);
+        await fetchLogs(activeUser);
+      } catch (err) {
+        console.error("Auth init error:", err);
+        fetchLogs(null); // Fallback to guest logs
+      } finally {
+        setLoading(false); // ALWAYS turn off loading screen
+      }
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
@@ -160,12 +170,9 @@ const [filterMonth, setFilterMonth] = useState("All");
       if (activeUser) {
         setShowAuthModal(false);
         setAuthMsg(""); 
-        // Force a fetch immediately upon login
         await fetchLogs(activeUser);
-        // Then merge guest data if any exists
         await mergeGuestData(activeUser.id);
       } else {
-        // Clear logs or show guest logs on logout
         fetchLogs(null);
       }
     });
@@ -289,8 +296,7 @@ const [filterMonth, setFilterMonth] = useState("All");
     } catch (err) {
       alert(err.message);
     } finally {
-      setIsSaving(true); // Should be false, fixed below
-      setIsSaving(false);
+      setIsSaving(false); // Change this to FALSE
     }
   };
 
