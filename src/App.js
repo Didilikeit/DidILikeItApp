@@ -371,9 +371,9 @@ export default function DidILikeItUltimate() {
             <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : theme.input, color: verdict.includes("Want") ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟢 Liked</button>
-            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : theme.input, color: verdict === "It was ok" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟡 OK</button>
-            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔴 No</button>
+            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟢 I liked it</button>
+            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : theme.input, color: verdict === "It was ok" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟡 It was ok</button>
+            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔴 I didn't like it</button>
           </div>
         </div>
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
