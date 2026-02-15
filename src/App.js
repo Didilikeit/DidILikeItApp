@@ -44,6 +44,7 @@ export default function DidILikeItUltimate() {
   // Auth Modal State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [authMsg, setAuthMsg] = useState(""); // NEW: For verification notice
 
   // Theme State
   const [darkMode, setDarkMode] = useState(localStorage.getItem("dark_mode") === "true");
@@ -133,6 +134,7 @@ export default function DidILikeItUltimate() {
       setUser(activeUser);
       if (activeUser) {
         setShowAuthModal(false);
+        setAuthMsg(""); // Clear message on success
         mergeGuestData(activeUser.id);
       } else {
         fetchLogs(null);
@@ -142,14 +144,25 @@ export default function DidILikeItUltimate() {
     return () => subscription.unsubscribe();
   }, [fetchLogs, mergeGuestData]);
 
+  // UPDATED AUTH HANDLER
   const handleAuth = async (e) => {
     e.preventDefault();
+    setAuthMsg("");
     const email = e.target.email.value;
     const password = e.target.password.value;
-    const { error } = isSignUp 
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert(error.message);
+
+    if (isSignUp) {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        alert(error.message);
+      } else if (data?.user && data?.session === null) {
+        // User created but needs email confirmation
+        setAuthMsg("Check your email to verify your account! (Check your spam folder just in case)");
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) alert(error.message);
+    }
   };
 
   useEffect(() => {
@@ -323,7 +336,7 @@ export default function DidILikeItUltimate() {
           {user ? (
             <button onClick={() => supabase.auth.signOut()} style={smallBtn}>Logout</button>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ ...smallBtn, color: "#3498db", fontWeight: "bold" }}>☁️ Login/Sync</button>
+            <button onClick={() => { setShowAuthModal(true); setAuthMsg(""); }} style={{ ...smallBtn, color: "#3498db", fontWeight: "bold" }}>☁️ Login/Sync</button>
           )}
         </div>
       </div>
@@ -333,6 +346,14 @@ export default function DidILikeItUltimate() {
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
           <div style={{ background: theme.card, padding: "30px", borderRadius: "20px", width: "100%", maxWidth: "340px", border: `1px solid ${theme.border}` }}>
             <h3 style={{ textAlign: "center", marginBottom: "10px" }}>{isSignUp ? "Create Account" : "Welcome Back"}</h3>
+            
+            {/* SUCCESS / VERIFICATION MESSAGE BOX */}
+            {authMsg && (
+              <div style={{ padding: "12px", background: "#27ae60", color: "#fff", borderRadius: "8px", fontSize: "13px", marginBottom: "15px", textAlign: "center", lineHeight: "1.4" }}>
+                {authMsg}
+              </div>
+            )}
+
             <p style={{ fontSize: "11px", textAlign: "center", color: theme.subtext, marginBottom: "20px" }}>
               {logs.length > 0 && !user ? "Your guest entries will sync once you log in." : "Access your media logs anywhere."}
             </p>
@@ -342,7 +363,7 @@ export default function DidILikeItUltimate() {
               <input name="password" type="password" placeholder="Password" required style={{ ...inputStyle, background: theme.input, color: theme.text }} />
               <button type="submit" style={{ ...primaryBtn, background: "#3498db", color: "#fff" }}>{isSignUp ? "Sign Up" : "Login"}</button>
             </form>
-            <button onClick={() => setIsSignUp(!isSignUp)} style={{ ...smallBtn, display: "block", margin: "15px auto 0", color: "#3498db" }}>{isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}</button>
+            <button onClick={() => { setIsSignUp(!isSignUp); setAuthMsg(""); }} style={{ ...smallBtn, display: "block", margin: "15px auto 0", color: "#3498db" }}>{isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}</button>
             <button onClick={() => setShowAuthModal(false)} style={{ ...smallBtn, display: "block", margin: "20px auto 0" }}>Close</button>
           </div>
         </div>
