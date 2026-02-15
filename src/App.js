@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- SUPABASE SETUP ---
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+// --- DUMMY SETUP FOR PREVIEW ---
+const SUPABASE_URL = "https://placeholder.supabase.co"; 
+const SUPABASE_ANON_KEY = "placeholder"; 
+const supabase = { 
+  auth: { getSession: () => Promise.resolve({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) },
+  from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) })
+};
 
 // --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING --- [cite: 3]
 const getHighlightedText = (content, term) => {
@@ -146,30 +148,33 @@ const [filterMonth, setFilterMonth] = useState("All");
     localStorage.setItem("dark_mode", darkMode);
   }, [darkMode]);
 
- useEffect(() => {
-    // 1. Create a variable to track if we've done the first check
-    let initialCheckDone = false;
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const activeUser = session?.user ?? null;
+      setUser(activeUser);
+      fetchLogs(activeUser);
+      setLoading(false);
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
       
-      if (activeUser) {
-        setShowAuthModal(false);
-        setAuthMsg("");
-        await fetchLogs(activeUser);
-        await mergeGuestData(activeUser.id);
-      } else {
-        await fetchLogs(null);
-        if (event === 'SIGNED_OUT') {
-          alert("You have been logged out.");
+      if (event === "PASSWORD_RECOVERY") {
+        const newPassword = prompt("Enter your new password:");
+        if (newPassword) {
+          const { error } = await supabase.auth.updateUser({ password: newPassword });
+          if (error) alert(error.message);
+          else alert("Password updated successfully!");
         }
       }
 
-      // 2. ONLY turn off loading once the very first check (of any kind) is complete
-      if (!initialCheckDone) {
-        setLoading(false);
-        initialCheckDone = true;
+      if (activeUser) {
+        setShowAuthModal(false);
+        setAuthMsg(""); 
+        mergeGuestData(activeUser.id);
+      } else {
+        fetchLogs(null);
       }
     });
 
