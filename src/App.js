@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
 
 // --- SUPABASE SETUP ---
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
@@ -81,19 +79,17 @@ export default function DidILikeItUltimate() {
     document.body.style.backgroundColor = theme.bg;
   }, [theme.bg]);
 
-  // --- AUTH SESSION & LISTENER ---
   useEffect(() => {
     localStorage.setItem("dark_mode", darkMode);
   }, [darkMode]);
 
+  // --- AUTH SESSION & LISTENER ---
   useEffect(() => {
-    // Check session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for Auth changes (login/logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -240,19 +236,27 @@ export default function DidILikeItUltimate() {
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
 
-  // --- LOGIN GUARD ---
+  // --- RENDERING ---
   if (loading) return <div style={{ textAlign: "center", padding: "50px", background: theme.bg, color: theme.text, minHeight: "100vh" }}>Loading...</div>;
 
+  // --- LOGIN PAGE ---
   if (!user) {
     return (
-      <div style={{ padding: "40px 20px", maxWidth: "400px", margin: "auto", background: theme.bg, minHeight: "100vh", color: theme.text }}>
-        <h2 style={{ textAlign: "center" }}>🤔 Did I Like It?</h2>
-        <Auth 
-          supabaseClient={supabase} 
-          appearance={{ theme: ThemeSupa }} 
-          theme={darkMode ? "dark" : "default"} 
-          providers={[]} 
-        />
+      <div style={{ padding: "60px 20px", textAlign: "center", background: theme.bg, minHeight: "100vh", color: theme.text, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <h2 style={{ fontSize: "32px", marginBottom: "10px" }}>🤔 Did I Like It?</h2>
+        <p style={{ color: theme.subtext, marginBottom: "40px" }}>Your personal media diary.</p>
+        
+        <div style={{ background: theme.card, padding: "30px", borderRadius: "20px", border: `1px solid ${theme.border}`, width: "100%", maxWidth: "320px" }}>
+           <button 
+             onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
+             style={{ ...primaryBtn, background: "#fff", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}
+           >
+             Continue with Google
+           </button>
+           <p style={{ fontSize: "12px", marginTop: "20px", color: theme.subtext }}>
+             Sign in to sync your books, movies, and albums across devices.
+           </p>
+        </div>
       </div>
     );
   }
@@ -292,7 +296,7 @@ export default function DidILikeItUltimate() {
               ) : (
                 <h3 style={{ margin: 0, fontSize: '18px' }}>
                   {customName ? `${customName}'s Stats` : "Your Stats"} 
-                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', marginLeft: '8px' }}>✏️</button>
+                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', marginLeft: '8px', cursor: "pointer" }}>✏️</button>
                 </h3>
               )}
             </div>
@@ -311,7 +315,7 @@ export default function DidILikeItUltimate() {
             const s = stats[type];
             return (
               <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button onClick={() => handleStatClick(type, "History")} style={{ background: theme.statCard, padding: '10px', borderRadius: '12px 12px 4px 4px', border: `2px solid ${darkMode ? "#333" : "#eee"}`, borderBottom: 'none', color: theme.text }}>
+                <button onClick={() => handleStatClick(type, "History")} style={{ background: theme.statCard, padding: '10px', borderRadius: '12px 12px 4px 4px', border: `2px solid ${darkMode ? "#333" : "#eee"}`, borderBottom: 'none', color: theme.text, cursor: "pointer" }}>
                   <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {type}s</div>
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
@@ -330,7 +334,7 @@ export default function DidILikeItUltimate() {
       <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: darkMode ? "0 4px 20px rgba(0,0,0,0.5)" : `5px 5px 0px ${theme.border}` }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
-            <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : (darkMode ? "#333" : "#eee"), color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold" }}>{t}</button>
+            <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : (darkMode ? "#333" : "#eee"), color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold", cursor: "pointer" }}>{t}</button>
           ))}
         </div>
         <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
@@ -365,16 +369,16 @@ export default function DidILikeItUltimate() {
       {/* FILTER TABS */}
       <div ref={listTopRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: darkMode ? "#333" : "#eee", borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
-          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: "bold" }}>{tab}</button>
+          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: "bold", cursor: "pointer" }}>{tab}</button>
         ))}
       </div>
       
       <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", borderRadius: "25px", paddingLeft: "20px" }} />
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text }}>
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
             <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
         </select>
-        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text }}>
+        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
             {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
         </select>
       </div>
