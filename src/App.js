@@ -73,6 +73,15 @@ export default function DidILikeItUltimate() {
   }, [user]);
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
+  // Auto-expand thoughts box as you type
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "60px"; // Reset to base height to calculate correctly
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = scrollHeight + "px";
+    }
+  }, [notes]); // Runs every time 'notes' text changes
 
   // --- LOGIC: CLICKABLE STATS & SCROLL ---
   const handleStatClick = (type, mode = "History") => {
@@ -289,7 +298,7 @@ export default function DidILikeItUltimate() {
           <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px" }} />
         </div>
-        <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", minHeight: "60px", resize: "none" }} />
+        <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", overflow: "hidden", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {mediaType === "Book" ? (
