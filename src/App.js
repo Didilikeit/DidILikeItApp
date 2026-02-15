@@ -268,19 +268,26 @@ export default function DidILikeItUltimate() {
       </div>
 
       {showAbout && (
-        <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid #3498db`, marginBottom: "25px", boxShadow: `4px 4px 0px #3498db` }}>
-          <p style={{ fontSize: "16px", margin: "0 0 10px 0", fontWeight: "bold" }}>
+  <div style={{ 
+    background: theme.card, 
+    padding: "20px", 
+    borderRadius: "15px", 
+    border: `2px solid ${darkMode ? "#1a4a6e" : "#3498db"}`, 
+    marginBottom: "25px",
+    lineHeight: "1.5"
+  }}>
+    <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
       What are you reading at the moment? Watched anything good lately? Have you heard their new album?
+      <br /><br />
+        Did you like it?
+        <br /><br />
+      Well, you've got no excuse not to answer now. You're welcome.
     </p>
-    <p style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "900", color: "#3498db" }}>
-      Did you like it?
-    </p>
-    <p style={{ fontSize: "14px", margin: "0 0 20px 0", fontStyle: "italic", color: theme.subtext }}>
-      You've got no excuse not to answer now. You're welcome.
-    </p>
-          <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
-        </div>
-      )}
+    <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>
+      📥 Export Data (.csv)
+    </button>
+  </div>
+)}
 
       {/* STATS DASHBOARD */}
       <div style={{ marginBottom: '25px' }}>
