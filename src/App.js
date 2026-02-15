@@ -8,13 +8,20 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING --- [cite: 3]
 const getHighlightedText = (content, term) => {
-  if (!term || !content || term.startsWith('"')) return content;
+  if (!term || !content) return content;
   
-  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // If the term is wrapped in quotes, we treat the whole thing (including quotes) as the term
+  const isLiteral = term.startsWith('"') && term.endsWith('"');
+  const searchterm = isLiteral ? term : term; // Keep quotes if present
+  
+  // Escape special characters for Regex
+  const escapedTerm = searchterm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  // Split the content by the term (case-insensitive)
   const parts = content.toString().split(new RegExp(`(${escapedTerm})`, "gi"));
   
   return parts.map((part, i) => 
-    part.toLowerCase() === term.toLowerCase() 
+    part.toLowerCase() === searchterm.toLowerCase() 
       ? <mark key={i} style={{ backgroundColor: "#f1c40f", color: "#000", borderRadius: "2px", padding: "0 2px" }}>{part}</mark> 
       : part
   );
