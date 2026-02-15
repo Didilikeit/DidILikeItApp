@@ -6,22 +6,26 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING ---
+const getHighlightedText = (content, term) => {
+  if (!term || !content || term.startsWith('"')) return content;
+  
+  // Escape special regex characters to prevent crashes
+  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = content.toString().split(new RegExp(`(${escapedTerm})`, "gi"));
+  
+  return parts.map((part, i) => 
+    part.toLowerCase() === term.toLowerCase() 
+      ? <mark key={i} style={{ backgroundColor: "#f1c40f", color: "#000", borderRadius: "2px", padding: "0 2px" }}>{part}</mark> 
+      : part
+  );
+};
+
 // --- COMPONENT: EXPANDABLE NOTE ---
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isLong = text.length > 120;
   const displayedText = isLong && !isExpanded ? text.substring(0, 120) + "..." : text;
-
-  // Helper to highlight search matches
-  const getHighlightedText = (content, term) => {
-    if (!term || term.startsWith('"')) return content; // Don't highlight literal quote searches for simplicity
-    const parts = content.split(new RegExp(`(${term})`, "gi"));
-    return parts.map((part, i) => 
-      part.toLowerCase() === term.toLowerCase() 
-        ? <mark key={i} style={{ backgroundColor: "#f1c40f", color: "#000", borderRadius: "2px", padding: "0 2px" }}>{part}</mark> 
-        : part
-    );
-  };
 
   return (
     <div style={{ 
@@ -74,6 +78,7 @@ export default function DidILikeItUltimate() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMedium, setFilterMedium] = useState("All");
   const [filterDate, setFilterDate] = useState("All");
+  const [sortBy, setSortBy] = useState("Date"); 
   const [statYearFilter, setStatYearFilter] = useState(new Date().getFullYear().toString()); 
   const [viewMode, setViewMode] = useState("History"); 
   const [showAbout, setShowAbout] = useState(false);
@@ -235,7 +240,6 @@ export default function DidILikeItUltimate() {
   };
 
   const handleSave = async () => {
-    // Applied .trim() to title and verdict check
     const trimmedTitle = title.trim();
     if (!trimmedTitle || !verdict) return alert("Title and Verdict required!");
 
@@ -312,9 +316,11 @@ export default function DidILikeItUltimate() {
   const getVerdictStyle = (v) => {
     const isDark = darkMode;
     switch(v) {
+      case "I loved it": 
+        return { bg: isDark ? "rgba(255, 215, 0, 0.15)" : "#fff9c4", color: isDark ? "#f1c40f" : "#9a7d0a", border: isDark ? "#f1c40f" : "#fbc02d", emoji: "⭐" };
       case "I liked it": 
         return { bg: isDark ? "rgba(76, 175, 80, 0.2)" : "#e8f5e9", color: isDark ? "#81c784" : "#2e7d32", border: isDark ? "#4caf50" : "#c8e6c9", emoji: "🟢" };
-      case "It was ok": 
+      case "Meh": 
         return { bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", color: isDark ? "#ffb74d" : "#ef6c00", border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" };
       case "I didn't like it": 
         return { bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", color: isDark ? "#e57373" : "#c62828", border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" };
@@ -335,9 +341,9 @@ export default function DidILikeItUltimate() {
 
   const stats = useMemo(() => {
     const categories = {
-      Book: { total: 0, liked: 0, ok: 0, no: 0 },
-      Movie: { total: 0, liked: 0, ok: 0, no: 0 },
-      Album: { total: 0, liked: 0, ok: 0, no: 0 },
+      Book: { total: 0, loved: 0, liked: 0, meh: 0, no: 0 },
+      Movie: { total: 0, loved: 0, liked: 0, meh: 0, no: 0 },
+      Album: { total: 0, loved: 0, liked: 0, meh: 0, no: 0 },
       active: 0, queue: 0
     };
     logs.forEach(log => {
@@ -349,8 +355,9 @@ export default function DidILikeItUltimate() {
       else if (v?.startsWith("Want to")) categories.queue++;
       else if (categories[type]) {
         categories[type].total++;
-        if (v === "I liked it") categories[type].liked++;
-        else if (v === "It was ok") categories[type].ok++;
+        if (v === "I loved it") categories[type].loved++;
+        else if (v === "I liked it") categories[type].liked++;
+        else if (v === "Meh") categories[type].meh++;
         else if (v === "I didn't like it") categories[type].no++;
       }
     });
@@ -360,7 +367,7 @@ export default function DidILikeItUltimate() {
   const dateOptions = ["All", ...new Set(logs.map(l => new Date(l.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' })))];
 
   const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
+    const filtered = logs.filter((log) => {
       const isQueue = log.verdict && log.verdict.startsWith("Want to");
       const isActive = log.verdict === "Currently Reading";
       const logMonthYear = new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -389,7 +396,18 @@ export default function DidILikeItUltimate() {
       }
       return matchesSearch && matchesMedium && matchesDate && matchesView;
     });
-  }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
+
+    return filtered.sort((a, b) => {
+        if (sortBy === "Title") {
+            return (a.title || "").localeCompare(b.title || "");
+        }
+        if (sortBy === "Verdict") {
+            const order = { "I loved it": 0, "I liked it": 1, "Meh": 2, "I didn't like it": 3, "Currently Reading": 4 };
+            return (order[a.verdict] ?? 99) - (order[b.verdict] ?? 99);
+        }
+        return new Date(b.logged_at) - new Date(a.logged_at);
+    });
+  }, [logs, searchTerm, filterMedium, viewMode, filterDate, sortBy]);
 
   // UI STYLES
   const smallBtn = { background: "none", border: `1px solid ${theme.border}`, padding: "5px 10px", borderRadius: "15px", cursor: "pointer", fontSize: "12px", color: theme.text };
@@ -449,19 +467,15 @@ export default function DidILikeItUltimate() {
         </div>
       )}
 
+      {/* ABOUT SECTION */}
       {showAbout && (
         <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${darkMode ? "#1a4a6e" : "#3498db"}`, marginBottom: "25px", lineHeight: "1.5" }}>
           <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
-            <i> What are you reading at the moment? Watched anything good lately? Have you heard their new album? <br /><br /> Did you like it?</i> <br /><br /> Well, you've got no excuse not to answer now. You're welcome.
+            <i> What are you reading at the moment? Watched anything good lately? <br /><br /> Did you like it?</i> <br /><br /> Well, you've got no excuse not to answer now.
           </p>
           <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export CSV</button>
-            <button 
-              onClick={handleDeleteAccount} 
-              style={{ ...smallBtn, color: "#ff4d4d", fontWeight: "bold", border: "1px solid #ff4d4d", padding: "5px 10px", borderRadius: "8px" }}
-            >
-              ⚠️ Permanently Delete Account
-            </button>
+            <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Export CSV</button>
+            <button onClick={handleDeleteAccount} style={{ ...smallBtn, color: "#ff4d4d", fontWeight: "bold", border: "1px solid #ff4d4d" }}>⚠️ Delete Account</button>
           </div>
         </div>
       )}
@@ -473,17 +487,17 @@ export default function DidILikeItUltimate() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               {isEditingName ? (
                 <div style={{ display: 'flex', gap: '5px' }}>
-                  <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px', width: '120px' }} placeholder="Name" />
-                  <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px', cursor: 'pointer' }}>✓</button>
+                  <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px', width: '120px' }} />
+                  <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px' }}>✓</button>
                 </div>
               ) : (
                 <h3 style={{ margin: 0, fontSize: '18px' }}>
                   {customName ? `${customName}'s Stats` : "Your Stats"} 
-                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', marginLeft: '8px' }}>✏️</button>
+                  <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px' }}>✏️</button>
                 </h3>
               )}
             </div>
-            <select value={statYearFilter} onChange={(e) => setStatYearFilter(e.target.value)} style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', outline: 'none', padding: 0, marginTop: '4px' }}>
+            <select value={statYearFilter} onChange={(e) => setStatYearFilter(e.target.value)} style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', outline: 'none' }}>
               {availableYears.map(y => <option key={y} value={y}>{y === "All" ? "All Time" : y}</option>)}
             </select>
           </div>
@@ -503,9 +517,10 @@ export default function DidILikeItUltimate() {
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div title="Liked" style={{ flex: s.liked || 1, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}`, borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I liked it").color }}>{s.liked || ""}</div>
-                  <div title="Ok" style={{ flex: s.ok || 1, background: getVerdictStyle("It was ok").bg, border: `1px solid ${getVerdictStyle("It was ok").border}`, fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("It was ok").color }}>{s.ok || ""}</div>
-                  <div title="No" style={{ flex: s.no || 1, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I didn't like it").color }}>{s.no || ""}</div>
+                  <div title="Loved" style={{ flex: s.loved || 0, background: getVerdictStyle("I loved it").bg, border: `1px solid ${getVerdictStyle("I loved it").border}`, borderRadius: '0 0 0 8px' }}></div>
+                  <div title="Liked" style={{ flex: s.liked || 0, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}` }}></div>
+                  <div title="Meh" style={{ flex: s.meh || 0, background: getVerdictStyle("Meh").bg, border: `1px solid ${getVerdictStyle("Meh").border}` }}></div>
+                  <div title="No" style={{ flex: s.no || 0, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0' }}></div>
                 </div>
               </div>
             );
@@ -530,21 +545,21 @@ export default function DidILikeItUltimate() {
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px", background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
         </div>
         <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", height: "60px", overflow: "hidden", resize: "none" }} />
+        
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {mediaType === "Book" ? (
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : theme.input, color: verdict === "Currently Reading" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>📖 Reading Now</button>
-              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : theme.input, color: verdict === "Want to Read" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔖 Want to Read</button>
-            </div>
-          ) : (
-            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : theme.input, color: verdict.includes("Want") ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
-          )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : theme.input, color: verdict === "It was ok" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔴 I didn't like it</button>
+            <button onClick={() => setVerdict(mediaType === "Book" ? "Currently Reading" : "Want to Watch")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" || verdict === "Want to Watch" ? "#3498db" : theme.input, color: verdict === "Currently Reading" || verdict === "Want to Watch" ? "#fff" : theme.text }}>⏳ {mediaType === "Book" ? "Reading Now" : "Queue"}</button>
+            {mediaType === "Book" && <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#9c27b0" : theme.input, color: verdict === "Want to Read" ? "#fff" : theme.text }}>🔖 To Read</button>}
+          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button onClick={() => setVerdict("I loved it")} style={{ ...verdictBtn, background: verdict === "I loved it" ? "#f1c40f" : theme.input, color: verdict === "I loved it" ? "#000" : theme.text, borderColor: "#f1c40f" }}>⭐ Loved it</button>
+            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text, borderColor: "#4caf50" }}>🟢 Liked it</button>
+            <button onClick={() => setVerdict("Meh")} style={{ ...verdictBtn, background: verdict === "Meh" ? "#ff9800" : theme.input, color: verdict === "Meh" ? "#fff" : theme.text, borderColor: "#ff9800" }}>🟡 Meh</button>
+            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text, borderColor: "#f44336" }}>🔴 No</button>
           </div>
         </div>
+
         <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
       </div>
 
@@ -554,43 +569,43 @@ export default function DidILikeItUltimate() {
           <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{tab}</button>
         ))}
       </div>
+      
       <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", borderRadius: "25px", paddingLeft: "20px" }} />
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
-            <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
+      
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '25px' }}>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ ...inputStyle, flex: 1.2, background: theme.input, color: theme.text }}>
+            <option value="Date">📅 Recent</option>
+            <option value="Title">🔤 Title A-Z</option>
+            <option value="Verdict">⭐ Top Rated</option>
         </select>
-        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
-            {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, flex: 1, background: theme.input, color: theme.text }}>
+            <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
         </select>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        {filteredLogs.map((log) => {
-          const m = getMediaStyle(log.media_type);
-          const v = getVerdictStyle(log.verdict);
-          const dateStr = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-          return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: `2px solid ${darkMode ? "#333" : "#eee"}`, borderLeft: `6px solid ${m.color}`, background: theme.card }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {log.media_type.toUpperCase()}</span>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", margin: "4px 0" }}>{log.title}</div>
-                  <div style={{ fontSize: "14px", color: theme.subtext }}>{log.creator}</div>
-                  <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{dateStr} {log.year_released && `• (${log.year_released})`}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', background: v.bg, color: v.color, border: `1px solid ${v.border}`, marginBottom: '10px', display: 'inline-block' }}>{v.emoji} {log.verdict}</div>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ ...smallBtn, color: "#3498db" }}>Edit</button>
-                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: '#e74c3c' }}>Delete</button>
-                  </div>
-                </div>
+      {/* LISTING */}
+      {filteredLogs.map((log) => {
+        const style = getVerdictStyle(log.verdict);
+        const m = getMediaStyle(log.media_type);
+        return (
+          <div key={log.id} style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `1px solid ${theme.border}`, marginBottom: "15px", position: "relative" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "10px", fontWeight: "bold", background: m.color, color: "#fff", padding: "2px 8px", borderRadius: "4px" }}>{m.icon} {log.media_type.toUpperCase()}</span>
+                <span style={{ fontSize: "10px", fontWeight: "bold", background: style.bg, color: style.color, padding: "2px 8px", borderRadius: "4px", border: `1px solid ${style.border}` }}>{style.emoji} {log.verdict}</span>
               </div>
-              {log.notes && <ExpandableNote text={log.notes} isDarkMode={darkMode} searchTerm={searchTerm} />}
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator || ""); setNotes(log.notes || ""); setVerdict(log.verdict); setYear(log.year_released || ""); window.scrollTo(0,0); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>✏️</button>
+                <button onClick={() => deleteLog(log.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>🗑️</button>
+              </div>
             </div>
-          );
-        })}
-      </div>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "18px" }}>{getHighlightedText(log.title, searchTerm)} {log.year_released && <span style={{ fontWeight: "normal", color: theme.subtext }}>({log.year_released})</span>}</h3>
+            {log.creator && <div style={{ fontSize: "14px", color: theme.subtext, marginBottom: "8px" }}>by {getHighlightedText(log.creator, searchTerm)}</div>}
+            {log.notes && <ExpandableNote text={log.notes} isDarkMode={darkMode} searchTerm={searchTerm} />}
+            <div style={{ marginTop: "12px", fontSize: "11px", color: theme.subtext, fontWeight: "bold" }}>Logged: {new Date(log.logged_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
