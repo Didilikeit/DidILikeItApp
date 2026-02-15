@@ -146,33 +146,30 @@ const [filterMonth, setFilterMonth] = useState("All");
     localStorage.setItem("dark_mode", darkMode);
   }, [darkMode]);
 
-  useEffect(() => {
-    // 1. Initial check when the app first loads
-    supabase.auth.getSession().then(({ data: { session } }) => {
+ useEffect(() => {
+    // 1. Create a variable to track if we've done the first check
+    let initialCheckDone = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
-      fetchLogs(activeUser);
-      setLoading(false);
-    });
-
-    // 2. Listen for Login/Logout events
-const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const activeUser = session?.user ?? null;
       
       if (activeUser) {
-        setUser(activeUser);
         setShowAuthModal(false);
         setAuthMsg("");
         await fetchLogs(activeUser);
         await mergeGuestData(activeUser.id);
       } else {
-        setUser(null);
-        fetchLogs(null);
-
-        // NEW: Show alert only when the user explicitly logs out
+        await fetchLogs(null);
         if (event === 'SIGNED_OUT') {
           alert("You have been logged out.");
         }
+      }
+
+      // 2. ONLY turn off loading once the very first check (of any kind) is complete
+      if (!initialCheckDone) {
+        setLoading(false);
+        initialCheckDone = true;
       }
     });
 
