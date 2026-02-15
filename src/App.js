@@ -417,5 +417,11 @@ export default function DidILikeItUltimate() {
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box" };
 const primaryBtn = { width: "100%", padding: "16px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
-const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer" };
+const smallBtn = { 
+  background: "none", 
+  border: "none", 
+  fontSize: "12px", 
+  cursor: "pointer",
+  color: "inherit" // This makes it inherit theme.text from the parent container
+};
 const pillBtn = { border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '12px' };
