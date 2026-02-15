@@ -227,15 +227,15 @@ export default function DidILikeItUltimate() {
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: 0, fontSize: "28px" }}>🤔 Did I Like It?</h2>
         <div style={{ display: "flex", justifyContent: "center", gap: "15px", marginTop: "10px" }}>
-          <button onClick={() => setShowAbout(!showAbout)} style={smallBtn}>{showAbout ? "Close Info" : "About / Export"}</button>
+          <button onClick={() => setShowAbout(!showAbout)} style={smallBtn}>{showAbout ? "Close" : "About"}</button>
           <button onClick={() => supabase.auth.signOut()} style={smallBtn}>Logout</button>
         </div>
       </div>
 
       {showAbout && (
         <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db" }}>
-          <h3 style={{ marginTop: 0 }}>Library Tools</h3>
-          <p style={{ fontSize: "14px" }}>Manage your gut reactions and export your history.</p>
+          <h3 style={{ marginTop: 0 }}>About</h3>
+          <p style={{ fontSize: "14px" }}>A simple tracker of all the media you consumed and whether you liked it or not.</p>
           <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Export Data (.csv)</button>
         </div>
       )}
