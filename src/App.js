@@ -157,20 +157,15 @@ const [filterMonth, setFilterMonth] = useState("All");
       const activeUser = session?.user ?? null;
       setUser(activeUser);
       
-      if (event === "PASSWORD_RECOVERY") {
-        const newPassword = prompt("Enter your new password:");
-        if (newPassword) {
-          const { error } = await supabase.auth.updateUser({ password: newPassword });
-          if (error) alert(error.message);
-          else alert("Password updated successfully!");
-        }
-      }
-
       if (activeUser) {
         setShowAuthModal(false);
         setAuthMsg(""); 
-        mergeGuestData(activeUser.id);
+        // Force a fetch immediately upon login
+        await fetchLogs(activeUser);
+        // Then merge guest data if any exists
+        await mergeGuestData(activeUser.id);
       } else {
+        // Clear logs or show guest logs on logout
         fetchLogs(null);
       }
     });
@@ -530,11 +525,51 @@ const smallBtn = {
       <div style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: '18px' }}>
-              {customName ? `${customName}'s Stats` : "Your Stats"} 
-              <button onClick={() => setIsEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px' }}>✏️</button>
-            </h3>
-            <select value={statYearFilter} onChange={(e) => setStatYearFilter(e.target.value)} style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', outline: 'none' }}>
+            {isEditingName ? (
+              /* Wrap the input in a form to catch the "Enter" key */
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault(); // Prevents the page from refreshing
+                  saveName();
+                }}
+                style={{ display: 'flex', gap: '5px', alignItems: 'center' }}
+              >
+                <input 
+                  value={customName} 
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="Enter name..."
+                  style={{ 
+                    ...inputStyle, 
+                    width: '120px', 
+                    padding: '4px 8px', 
+                    fontSize: '14px', 
+                    marginBottom: 0,
+                    background: theme.input,
+                    color: theme.text 
+                  }}
+                  autoFocus
+                />
+                <button type="submit" style={{ ...smallBtn, color: "#27ae60", padding: '4px 8px' }}>
+                  ✅
+                </button>
+              </form>
+            ) : (
+              <h3 style={{ margin: 0, fontSize: '18px' }}>
+                {customName ? `${customName}'s stats` : "Your stats"} 
+                <button 
+                  onClick={() => setIsEditingName(true)} 
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px', fontSize: '14px' }}
+                >
+                  ✏️
+                </button>
+              </h3>
+            )}
+            
+            <select 
+              value={statYearFilter} 
+              onChange={(e) => setStatYearFilter(e.target.value)} 
+              style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', outline: 'none' }}
+            >
               {availableYears.map(y => <option key={y} value={y}>{y === "All" ? "All Time" : y}</option>)}
             </select>
           </div>
