@@ -277,9 +277,9 @@ export default function DidILikeItUltimate() {
     lineHeight: "1.5"
   }}>
     <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
-      What are you reading at the moment? Watched anything good lately? Have you heard their new album?
+      <i> What are you reading at the moment? Watched anything good lately? Have you heard their new album?
       <br /><br />
-        Did you like it?
+        Did you like it?</i>
         <br /><br />
       Well, you've got no excuse not to answer now. You're welcome.
     </p>
