@@ -44,7 +44,7 @@ export default function DidILikeItUltimate() {
   // Auth Modal State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
-  const [authMsg, setAuthMsg] = useState(""); // NEW: For verification notice
+  const [authMsg, setAuthMsg] = useState(""); 
 
   // Theme State
   const [darkMode, setDarkMode] = useState(localStorage.getItem("dark_mode") === "true");
@@ -129,12 +129,23 @@ export default function DidILikeItUltimate() {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
+      
+      // Handle Password Reset Redirect
+      if (event === "PASSWORD_RECOVERY") {
+        const newPassword = prompt("Enter your new password:");
+        if (newPassword) {
+          const { error } = await supabase.auth.updateUser({ password: newPassword });
+          if (error) alert(error.message);
+          else alert("Password updated successfully!");
+        }
+      }
+
       if (activeUser) {
         setShowAuthModal(false);
-        setAuthMsg(""); // Clear message on success
+        setAuthMsg(""); 
         mergeGuestData(activeUser.id);
       } else {
         fetchLogs(null);
@@ -144,7 +155,7 @@ export default function DidILikeItUltimate() {
     return () => subscription.unsubscribe();
   }, [fetchLogs, mergeGuestData]);
 
-  // UPDATED AUTH HANDLER
+  // AUTH HANDLERS
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthMsg("");
@@ -156,12 +167,39 @@ export default function DidILikeItUltimate() {
       if (error) {
         alert(error.message);
       } else if (data?.user && data?.session === null) {
-        // User created but needs email confirmation
         setAuthMsg("Check your email to verify your account! (Check your spam folder just in case)");
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) alert(error.message);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const email = prompt("Enter your email address for a reset link:");
+    if (!email) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) alert(error.message);
+    else alert("Reset email sent! Check your inbox.");
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmWipe = window.confirm("This will permanently delete ALL your media logs. Your account login will remain until manually removed by the admin. Proceed?");
+    if (!confirmWipe) return;
+
+    if (user) {
+      const { error } = await supabase.from("logs").delete().eq("user_id", user.id);
+      if (error) alert("Error wiping data: " + error.message);
+      else {
+        alert("All data wiped. To fully delete your account record, please contact the admin.");
+        fetchLogs(user);
+      }
+    } else {
+      localStorage.removeItem("guest_logs");
+      fetchLogs(null);
+      alert("Guest data cleared.");
     }
   };
 
@@ -347,7 +385,6 @@ export default function DidILikeItUltimate() {
           <div style={{ background: theme.card, padding: "30px", borderRadius: "20px", width: "100%", maxWidth: "340px", border: `1px solid ${theme.border}` }}>
             <h3 style={{ textAlign: "center", marginBottom: "10px" }}>{isSignUp ? "Create Account" : "Welcome Back"}</h3>
             
-            {/* SUCCESS / VERIFICATION MESSAGE BOX */}
             {authMsg && (
               <div style={{ padding: "12px", background: "#27ae60", color: "#fff", borderRadius: "8px", fontSize: "13px", marginBottom: "15px", textAlign: "center", lineHeight: "1.4" }}>
                 {authMsg}
@@ -363,6 +400,11 @@ export default function DidILikeItUltimate() {
               <input name="password" type="password" placeholder="Password" required style={{ ...inputStyle, background: theme.input, color: theme.text }} />
               <button type="submit" style={{ ...primaryBtn, background: "#3498db", color: "#fff" }}>{isSignUp ? "Sign Up" : "Login"}</button>
             </form>
+            
+            {!isSignUp && (
+              <button onClick={handleForgotPassword} style={{ ...smallBtn, display: "block", margin: "10px auto 0", color: "#3498db" }}>Forgot Password?</button>
+            )}
+
             <button onClick={() => { setIsSignUp(!isSignUp); setAuthMsg(""); }} style={{ ...smallBtn, display: "block", margin: "15px auto 0", color: "#3498db" }}>{isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}</button>
             <button onClick={() => setShowAuthModal(false)} style={{ ...smallBtn, display: "block", margin: "20px auto 0" }}>Close</button>
           </div>
@@ -374,7 +416,10 @@ export default function DidILikeItUltimate() {
           <p style={{ fontSize: "15px", margin: "0 0 15px 0", color: theme.text }}>
             <i> What are you reading at the moment? Watched anything good lately? Have you heard their new album? <br /><br /> Did you like it?</i> <br /><br /> Well, you've got no excuse not to answer now. You're welcome.
           </p>
-          <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+            <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export CSV</button>
+            <button onClick={handleDeleteAccount} style={{ ...smallBtn, color: "#e74c3c", fontWeight: "bold", padding: 0 }}>🗑️ Delete Account</button>
+          </div>
         </div>
       )}
 
