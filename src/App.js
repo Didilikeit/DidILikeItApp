@@ -10,18 +10,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const getHighlightedText = (content, term) => {
   if (!term || !content) return content;
   
-  // If the term is wrapped in quotes, we treat the whole thing (including quotes) as the term
-  const isLiteral = term.startsWith('"') && term.endsWith('"');
-  const searchterm = isLiteral ? term : term; // Keep quotes if present
-  
-  // Escape special characters for Regex
-  const escapedTerm = searchterm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
-  // Split the content by the term (case-insensitive)
+  // Clean the term for highlighting: remove the leading/trailing quotes if present
+  // but keep the internal text for matching
+  const highlightTerm = term.replace(/^"|"$/g, '');
+  if (!highlightTerm) return content;
+
+  const escapedTerm = highlightTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const parts = content.toString().split(new RegExp(`(${escapedTerm})`, "gi"));
   
   return parts.map((part, i) => 
-    part.toLowerCase() === searchterm.toLowerCase() 
+    part.toLowerCase() === highlightTerm.toLowerCase() 
       ? <mark key={i} style={{ backgroundColor: "#f1c40f", color: "#000", borderRadius: "2px", padding: "0 2px" }}>{part}</mark> 
       : part
   );
@@ -410,13 +408,17 @@ const [filterMonth, setFilterMonth] = useState("All");
       
       let matchesSearch = false;
       const term = searchTerm.toLowerCase().trim();
+      
       if (!term) {
         matchesSearch = true;
       } else if (term.startsWith('"')) {
-        const cleanQuote = term.replace(/^"|"$/g, '');
+        // PHRASE SEARCH: Remove the first quote and optional end quote
+        const phrase = term.replace(/^"|"$/g, '');
         const fieldsToSearch = [log.title, log.creator, log.notes].map(f => (f || "").toLowerCase());
-        matchesSearch = fieldsToSearch.some(f => f.includes(cleanQuote));
+        // Matches if any field contains the exact sequence typed so far
+        matchesSearch = fieldsToSearch.some(f => f.includes(phrase));
       } else {
+        // NORMAL SEARCH: Split by words
         const searchWords = term.split(/\s+/);
         const searchable = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${logMonthYear} ${yearWithBrackets}`.toLowerCase();
         matchesSearch = searchWords.every(word => searchable.includes(word));
