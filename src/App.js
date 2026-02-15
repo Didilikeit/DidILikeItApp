@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -269,10 +270,8 @@ export default function DidILikeItUltimate() {
       {showAbout && (
         <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid #3498db`, marginBottom: "25px", boxShadow: `4px 4px 0px #3498db` }}>
           <p style={{ fontSize: "15px", margin: "0 0 15px 0", lineHeight: "1.4" }}>
-            Have you seen it? What did you think? Did you like it?
+            This is a tool to track the media you've consumed and whether you liked it or not.
           </p>
-            Now you've got no excuse not to answer. Jog your memory with this little tracker. You're  welcome.
-              </p>
           <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
         </div>
       )}
