@@ -7,13 +7,22 @@ const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- COMPONENT: EXPANDABLE NOTE ---
-const ExpandableNote = ({ text }) => {
+const ExpandableNote = ({ text, isDarkMode }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isLong = text.length > 120;
   const displayedText = isLong && !isExpanded ? text.substring(0, 120) + "..." : text;
 
   return (
-    <div style={{ marginTop: "10px", padding: "12px", background: "#f9f9f9", borderRadius: "8px", fontSize: "14px", fontStyle: "italic", borderLeft: "4px solid #ddd" }}>
+    <div style={{ 
+      marginTop: "10px", 
+      padding: "12px", 
+      background: isDarkMode ? "#2d2d2d" : "#f9f9f9", 
+      borderRadius: "8px", 
+      fontSize: "14px", 
+      fontStyle: "italic", 
+      borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
+      color: isDarkMode ? "#bbb" : "#555"
+    }}>
       "{displayedText}"
       {isLong && (
         <button 
@@ -32,6 +41,9 @@ export default function DidILikeItUltimate() {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   
+  // Theme State
+  const [darkMode, setDarkMode] = useState(localStorage.getItem("dark_mode") === "true");
+
   // Form State
   const [title, setTitle] = useState("");
   const [creator, setCreator] = useState("");
@@ -56,7 +68,22 @@ export default function DidILikeItUltimate() {
   const textareaRef = useRef(null);
   const listTopRef = useRef(null);
 
+  // --- THEME DEFINITION ---
+  const theme = {
+    bg: darkMode ? "#121212" : "#f4f4f4",
+    card: darkMode ? "#1e1e1e" : "#ffffff",
+    text: darkMode ? "#e0e0e0" : "#333333",
+    border: darkMode ? "#333333" : "#000000",
+    input: darkMode ? "#2d2d2d" : "#ffffff",
+    subtext: darkMode ? "#999" : "#666",
+    statCard: darkMode ? "#252525" : "#ffffff"
+  };
+
   // --- AUTH & DATA ---
+  useEffect(() => {
+    localStorage.setItem("dark_mode", darkMode);
+  }, [darkMode]);
+
   useEffect(() => {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -73,15 +100,16 @@ export default function DidILikeItUltimate() {
   }, [user]);
 
   useEffect(() => { if (user) fetchLogs(); }, [user, fetchLogs]);
-  // Auto-expand thoughts box as you type
+
+  // Auto-expand thoughts box
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "60px"; // Reset to base height to calculate correctly
+      textarea.style.height = "60px";
       const scrollHeight = textarea.scrollHeight;
       textarea.style.height = scrollHeight + "px";
     }
-  }, [notes]); // Runs every time 'notes' text changes
+  }, [notes]);
 
   // --- LOGIC: CLICKABLE STATS & SCROLL ---
   const handleStatClick = (type, mode = "History") => {
@@ -135,63 +163,72 @@ export default function DidILikeItUltimate() {
   // --- STYLING HELPERS ---
   const getMediaStyle = (type) => {
     switch(type) {
-      case 'Book': return { color: '#2980b9', icon: '📖', creatorLabel: 'Author' };
-      case 'Movie': return { color: '#8e44ad', icon: '🎬', creatorLabel: 'Director' };
-      case 'Album': return { color: '#16a085', icon: '💿', creatorLabel: 'Artist/Band' };
-      default: return { color: '#7f8c8d', icon: '📎', creatorLabel: 'Creator' };
+      case 'Book': return { color: '#3498db', icon: '📖', creatorLabel: 'Author' };
+      case 'Movie': return { color: '#9b59b6', icon: '🎬', creatorLabel: 'Director' };
+      case 'Album': return { color: '#1abc9c', icon: '💿', creatorLabel: 'Artist/Band' };
+      default: return { color: '#95a5a6', icon: '📎', creatorLabel: 'Creator' };
     }
   };
 
   const getVerdictStyle = (v) => {
+    const isDark = darkMode;
     switch(v) {
       case "I liked it": 
-        return { bg: "#e8f5e9", color: "#2e7d32", border: "#c8e6c9", emoji: "🟢" };
+        return { 
+          bg: isDark ? "rgba(76, 175, 80, 0.2)" : "#e8f5e9", 
+          color: isDark ? "#81c784" : "#2e7d32", 
+          border: isDark ? "#4caf50" : "#c8e6c9", emoji: "🟢" 
+        };
       case "It was ok": 
-        return { bg: "#fff3e0", color: "#ef6c00", border: "#ffe0b2", emoji: "🟡" };
+        return { 
+          bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", 
+          color: isDark ? "#ffb74d" : "#ef6c00", 
+          border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" 
+        };
       case "I didn't like it": 
-        return { bg: "#ffebee", color: "#c62828", border: "#ffcdd2", emoji: "🔴" };
+        return { 
+          bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", 
+          color: isDark ? "#e57373" : "#c62828", 
+          border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" 
+        };
       case "Currently Reading": 
-        return { bg: "#e1f5fe", color: "#01579b", border: "#b3e5fc", emoji: "📖" };
+        return { 
+          bg: isDark ? "rgba(3, 169, 244, 0.2)" : "#e1f5fe", 
+          color: isDark ? "#4fc3f7" : "#01579b", 
+          border: isDark ? "#03a9f4" : "#b3e5fc", emoji: "📖" 
+        };
       default:
-        // This covers the "Want to..." queue labels
         if (v && v.startsWith("Want to")) {
-          return { bg: "#f3e5f5", color: "#4a148c", border: "#e1bee7", emoji: "⏳" };
+          return { 
+            bg: isDark ? "rgba(156, 39, 176, 0.2)" : "#f3e5f5", 
+            color: isDark ? "#ce93d8" : "#4a148c", 
+            border: isDark ? "#9c27b0" : "#e1bee7", emoji: "⏳" 
+          };
         }
-        return { bg: "#f0f0f0", color: "#555", border: "#ddd", emoji: "⚪" };
+        return { bg: isDark ? "#333" : "#f0f0f0", color: isDark ? "#bbb" : "#555", border: isDark ? "#444" : "#ddd", emoji: "⚪" };
     }
   };
 
-  // --- MEMOIZED DATA (REBUILT FROM SCRATCH) ---
   const stats = useMemo(() => {
     const categories = {
       Book: { total: 0, liked: 0, ok: 0, no: 0 },
       Movie: { total: 0, liked: 0, ok: 0, no: 0 },
       Album: { total: 0, liked: 0, ok: 0, no: 0 },
-      active: 0,
-      queue: 0
+      active: 0, queue: 0
     };
 
     logs.forEach(log => {
       const type = log.media_type;
-      const v = log.verdict; // The exact string from the button saved in your DB
-
-      if (v === "Currently Reading") {
-        categories.active++;
-      } else if (v === "Want to Read" || v === "Want to Watch" || v === "Want to Listen") {
-        categories.queue++;
-      } else if (categories[type]) {
+      const v = log.verdict;
+      if (v === "Currently Reading") categories.active++;
+      else if (v === "Want to Read" || v === "Want to Watch" || v === "Want to Listen") categories.queue++;
+      else if (categories[type]) {
         categories[type].total++;
-        // Strict matching to button labels
-        if (v === "I liked it") {
-          categories[type].liked++;
-        } else if (v === "It was ok") {
-          categories[type].ok++;
-        } else if (v === "I didn't like it") {
-          categories[type].no++;
-        }
+        if (v === "I liked it") categories[type].liked++;
+        else if (v === "It was ok") categories[type].ok++;
+        else if (v === "I didn't like it") categories[type].no++;
       }
     });
-
     return categories;
   }, [logs]);
 
@@ -219,24 +256,26 @@ export default function DidILikeItUltimate() {
     });
   }, [logs, searchTerm, filterMedium, viewMode, filterDate]);
 
-  if (loading) return <div style={{ textAlign: "center", padding: "50px" }}>Loading...</div>;
+  if (loading) return <div style={{ textAlign: "center", padding: "50px", background: theme.bg, color: theme.text, minHeight: "100vh" }}>Loading...</div>;
 
   return (
-    <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif", color: "#333" }}>
+    <div style={{ padding: "20px", maxWidth: "500px", margin: "auto", fontFamily: "sans-serif", backgroundColor: theme.bg, color: theme.text, minHeight: "100vh", transition: "0.2s all" }}>
       {/* HEADER */}
       <div style={{ textAlign: "center", marginBottom: "25px" }}>
         <h2 style={{ margin: 0, fontSize: "28px" }}>🤔 Did I Like It?</h2>
         <div style={{ display: "flex", justifyContent: "center", gap: "15px", marginTop: "10px" }}>
+          <button onClick={() => setDarkMode(!darkMode)} style={smallBtn}>{darkMode ? "☀️ Light" : "🌙 Dark"}</button>
           <button onClick={() => setShowAbout(!showAbout)} style={smallBtn}>{showAbout ? "Close" : "About"}</button>
           <button onClick={() => supabase.auth.signOut()} style={smallBtn}>Logout</button>
         </div>
       </div>
 
       {showAbout && (
-        <div style={{ background: "#fdfefe", padding: "20px", borderRadius: "15px", border: "2px solid #3498db", marginBottom: "25px", boxShadow: "4px 4px 0px #3498db" }}>
-          <h3 style={{ marginTop: 0 }}>About</h3>
-          <p style={{ fontSize: "14px" }}>A simple tracker of all the media you consumed and whether you liked it or not.</p>
-          <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold" }}>📥 Export Data (.csv)</button>
+        <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid #3498db`, marginBottom: "25px", boxShadow: `4px 4px 0px #3498db` }}>
+          <p style={{ fontSize: "15px", margin: "0 0 15px 0", lineHeight: "1.4" }}>
+            This is a tool to track the media you've consumed and whether you liked it or not.
+          </p>
+          <button onClick={exportCSV} style={{ ...smallBtn, color: "#27ae60", fontWeight: "bold", padding: 0 }}>📥 Export Data (.csv)</button>
         </div>
       )}
 
@@ -246,8 +285,8 @@ export default function DidILikeItUltimate() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             {isEditingName ? (
               <div style={{ display: 'flex', gap: '5px' }}>
-                <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, marginBottom: 0, padding: '4px 8px' }} placeholder="Enter Name" />
-                <button onClick={saveName} style={{ border: 'none', background: '#000', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}>✓</button>
+                <input value={customName} onChange={(e) => setCustomName(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, marginBottom: 0, padding: '4px 8px' }} placeholder="Enter Name" />
+                <button onClick={saveName} style={{ border: 'none', background: theme.text, color: theme.bg, borderRadius: '4px', cursor: 'pointer' }}>✓</button>
               </div>
             ) : (
               <h3 style={{ margin: 0 }}>
@@ -257,8 +296,8 @@ export default function DidILikeItUltimate() {
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-             <button onClick={() => handleStatClick("All", "Reading")} style={{ ...pillBtn, background: '#e1f5fe', color: '#01579b' }}>📖 {stats.active} Active</button>
-             <button onClick={() => handleStatClick("All", "Queue")} style={{ ...pillBtn, background: '#f3e5f5', color: '#4a148c' }}>⏳ {stats.queue} Queue</button>
+             <button onClick={() => handleStatClick("All", "Reading")} style={{ ...pillBtn, background: darkMode ? "#1b3341" : "#e1f5fe", color: darkMode ? "#4fc3f7" : "#01579b" }}>📖 {stats.active}</button>
+             <button onClick={() => handleStatClick("All", "Queue")} style={{ ...pillBtn, background: darkMode ? "#331b41" : "#f3e5f5", color: darkMode ? "#ce93d8" : "#4a148c" }}>⏳ {stats.queue}</button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -267,14 +306,14 @@ export default function DidILikeItUltimate() {
             const s = stats[type];
             return (
               <div key={type} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button onClick={() => handleStatClick(type, "History")} style={{ background: '#fff', padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: '2px solid #eee', borderBottom: 'none', cursor: 'pointer' }}>
+                <button onClick={() => handleStatClick(type, "History")} style={{ background: theme.statCard, padding: '10px', borderRadius: '12px 12px 4px 4px', textAlign: 'center', border: `2px solid ${darkMode ? "#333" : "#eee"}`, borderBottom: 'none', cursor: 'pointer', color: theme.text }}>
                   <div style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {type}s</div>
                   <div style={{ fontSize: '18px', fontWeight: '800' }}>{s.total}</div>
                 </button>
                 <div style={{ display: 'flex', gap: '2px', height: '22px' }}>
-                  <div title="Liked" style={{ flex: s.liked || 1, background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2e7d32' }}>{s.liked > 0 ? s.liked : ""}</div>
-                  <div title="Ok" style={{ flex: s.ok || 1, background: '#fff3e0', border: '1px solid #ffe0b2', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef6c00' }}>{s.ok > 0 ? s.ok : ""}</div>
-                  <div title="No" style={{ flex: s.no || 1, background: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c62828' }}>{s.no > 0 ? s.no : ""}</div>
+                  <div style={{ flex: s.liked || 1, background: getVerdictStyle("I liked it").bg, border: `1px solid ${getVerdictStyle("I liked it").border}`, borderRadius: '0 0 0 8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I liked it").color }}>{s.liked || ""}</div>
+                  <div style={{ flex: s.ok || 1, background: getVerdictStyle("It was ok").bg, border: `1px solid ${getVerdictStyle("It was ok").border}`, fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("It was ok").color }}>{s.ok || ""}</div>
+                  <div style={{ flex: s.no || 1, background: getVerdictStyle("I didn't like it").bg, border: `1px solid ${getVerdictStyle("I didn't like it").border}`, borderRadius: '0 0 8px 0', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: getVerdictStyle("I didn't like it").color }}>{s.no || ""}</div>
                 </div>
               </div>
             );
@@ -283,55 +322,54 @@ export default function DidILikeItUltimate() {
       </div>
 
       {/* ENTRY FORM */}
-      <div style={{ background: "#fff", padding: "20px", borderRadius: "15px", border: "2px solid #000", marginBottom: "30px", boxShadow: "5px 5px 0px #000" }}>
+      <div style={{ background: theme.card, padding: "20px", borderRadius: "15px", border: `2px solid ${theme.border}`, marginBottom: "30px", boxShadow: `5px 5px 0px ${theme.border}` }}>
         <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
           {["Book", "Movie", "Album"].map((t) => (
-            <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? "#000" : "#eee", color: mediaType === t ? "#fff" : "#000", fontWeight: "bold", cursor: "pointer" }}>{t}</button>
+            <button key={t} onClick={() => { setMediaType(t); setVerdict(""); }} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: mediaType === t ? (darkMode ? "#fff" : "#000") : (darkMode ? "#333" : "#eee"), color: mediaType === t ? (darkMode ? "#000" : "#fff") : theme.text, fontWeight: "bold", cursor: "pointer" }}>{t}</button>
           ))}
         </div>
-        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
         <div style={{ display: "flex", gap: "10px" }}>
-          <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
-          <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
+          <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
         </div>
         <div style={{ marginBottom: "10px" }}>
-          <label style={{ fontSize: "11px", color: "#888", fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
-          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px" }} />
+          <label style={{ fontSize: "11px", color: theme.subtext, fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
+          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px", background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
         </div>
-        <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, height: "60px", overflow: "hidden", resize: "none" }} />
+        <textarea ref={textareaRef} placeholder="My thoughts..." value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", height: "60px", overflow: "hidden", resize: "none" }} />
         
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {mediaType === "Book" ? (
             <div style={{ display: 'flex', gap: '5px' }}>
-              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : "#fff", color: verdict === "Currently Reading" ? "#fff" : "#000" }}>📖 Reading Now</button>
-              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : "#fff", color: verdict === "Want to Read" ? "#fff" : "#000" }}>🔖 Want to Read</button>
+              <button onClick={() => setVerdict("Currently Reading")} style={{ ...verdictBtn, flex: 1, background: verdict === "Currently Reading" ? "#3498db" : theme.input, color: verdict === "Currently Reading" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>📖 Reading Now</button>
+              <button onClick={() => setVerdict("Want to Read")} style={{ ...verdictBtn, flex: 1, background: verdict === "Want to Read" ? "#5dade2" : theme.input, color: verdict === "Want to Read" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔖 Want to Read</button>
             </div>
           ) : (
-            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : "#fff", color: verdict.includes("Want") ? "#fff" : "#000" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
+            <button onClick={() => setVerdict(mediaType === "Movie" ? "Want to Watch" : "Want to Listen")} style={{ ...verdictBtn, background: verdict.includes("Want") ? "#9b59b6" : theme.input, color: verdict.includes("Want") ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>⏳ {mediaType === "Movie" ? "Want to Watch" : "Want to Listen"}</button>
           )}
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : "#fff", color: verdict === "I liked it" ? "#fff" : "#000" }}>🟢 I liked it</button>
-            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : "#fff", color: verdict === "It was ok" ? "#fff" : "#000" }}>🟡 It was ok</button>
-            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : "#fff", color: verdict === "I didn't like it" ? "#fff" : "#000" }}>🔴 I didn't like it</button>
+            <button onClick={() => setVerdict("I liked it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I liked it" ? "#4caf50" : theme.input, color: verdict === "I liked it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟢 Liked</button>
+            <button onClick={() => setVerdict("It was ok")} style={{ ...verdictBtn, flex: 1, background: verdict === "It was ok" ? "#ff9800" : theme.input, color: verdict === "It was ok" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🟡 OK</button>
+            <button onClick={() => setVerdict("I didn't like it")} style={{ ...verdictBtn, flex: 1, background: verdict === "I didn't like it" ? "#f44336" : theme.input, color: verdict === "I didn't like it" ? "#fff" : theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>🔴 No</button>
           </div>
         </div>
-        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
+        <button onClick={handleSave} style={{ ...primaryBtn, marginTop: "20px", background: darkMode ? "#fff" : "#000", color: darkMode ? "#000" : "#fff" }}>{editingId ? "UPDATE ENTRY" : "SAVE ENTRY"}</button>
       </div>
 
       {/* FILTER TABS */}
-      <div ref={listTopRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: '#eee', borderRadius: '12px', padding: '4px' }}>
+      <div ref={listTopRef} style={{ display: 'flex', gap: '5px', marginBottom: '15px', background: darkMode ? "#333" : "#eee", borderRadius: '12px', padding: '4px' }}>
         {["History", "Reading", "Queue"].map((tab) => (
-          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? "#fff" : "transparent", fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{tab}</button>
+          <button key={tab} onClick={() => setViewMode(tab)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: viewMode === tab ? (darkMode ? "#444" : "#fff") : "transparent", color: theme.text, fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{tab}</button>
         ))}
       </div>
       
-      {/* SEARCH & DATE PICKERS */}
-      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, borderRadius: "25px", paddingLeft: "20px" }} />
+      <input placeholder="🔍 Search library..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd", borderRadius: "25px", paddingLeft: "20px" }} />
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={inputStyle}>
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
             <option value="All">All Mediums</option><option value="Book">Books</option><option value="Movie">Movies</option><option value="Album">Albums</option>
         </select>
-        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={inputStyle}>
+        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }}>
             {dateOptions.map(d => <option key={d} value={d}>{d === "All" ? "All Time" : d}</option>)}
         </select>
       </div>
@@ -344,12 +382,12 @@ export default function DidILikeItUltimate() {
           const dateStr = new Date(log.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
           
           return (
-            <div key={log.id} style={{ padding: "15px", borderBottom: "2px solid #eee", borderLeft: `6px solid ${m.color}`, background: '#fff' }}>
+            <div key={log.id} style={{ padding: "15px", borderBottom: `2px solid ${darkMode ? "#333" : "#eee"}`, borderLeft: `6px solid ${m.color}`, background: theme.card }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '10px', fontWeight: 'bold', color: m.color }}>{m.icon} {log.media_type.toUpperCase()}</span>
                   <div style={{ fontSize: "18px", fontWeight: "bold", margin: "4px 0" }}>{log.title}</div>
-                  <div style={{ fontSize: "14px", color: "#666" }}>{log.creator}</div>
+                  <div style={{ fontSize: "14px", color: theme.subtext }}>{log.creator}</div>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{dateStr} {log.year_released && `• (${log.year_released})`}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -360,16 +398,15 @@ export default function DidILikeItUltimate() {
                     {v.emoji} {log.verdict}
                   </div>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={smallBtn}>Edit</button>
-                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: 'red' }}>Delete</button>
+                    <button onClick={() => { setEditingId(log.id); setTitle(log.title); setCreator(log.creator); setNotes(log.notes); setYear(log.year_released || ""); setVerdict(log.verdict); setMediaType(log.media_type); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ ...smallBtn, color: "#3498db" }}>Edit</button>
+                    <button onClick={() => deleteLog(log.id)} style={{ ...smallBtn, color: '#e74c3c' }}>Delete</button>
                   </div>
                 </div>
               </div>
-              {log.notes && <ExpandableNote text={log.notes} />}
+              {log.notes && <ExpandableNote text={log.notes} isDarkMode={darkMode} />}
             </div>
           );
         })}
-        {filteredLogs.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#999', fontSize: '14px' }}>No entries found for this view.</div>}
       </div>
     </div>
   );
@@ -377,7 +414,7 @@ export default function DidILikeItUltimate() {
 
 // --- REUSABLE STYLES ---
 const inputStyle = { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", boxSizing: "border-box" };
-const primaryBtn = { width: "100%", padding: "16px", background: "#000", color: "#fff", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
+const primaryBtn = { width: "100%", padding: "16px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", fontSize: "14px" };
 const verdictBtn = { padding: "10px", borderRadius: "8px", border: "1px solid #ddd", cursor: "pointer", fontSize: '12px', fontWeight: "600" };
-const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#0070f3" };
+const smallBtn = { background: "none", border: "none", fontSize: "12px", cursor: "pointer" };
 const pillBtn = { border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '12px' };
