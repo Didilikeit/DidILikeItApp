@@ -242,12 +242,14 @@ const [filterMonth, setFilterMonth] = useState("All");
   };
 
   const handleSave = async () => {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle || !verdict) return alert("Title and Verdict required!");
+        const trimmedTitle = title.trim();
+        if (!trimmedTitle || !verdict) return alert("Title and Verdict required!");
 
-    if (year && (year.length !== 4 || isNaN(year))) {
-      return alert("Please enter a valid 4-digit year.");
-    }
+        // FIX: Convert year to string before checking length
+        const yearStr = year ? year.toString() : "";
+        if (yearStr && (yearStr.length !== 4 || isNaN(yearStr))) {
+            return alert("Please enter a valid 4-digit year.");
+        }
 
     setIsSaving(true);
     
