@@ -6,6 +6,7 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+
 // --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING --- [cite: 3]
 const getHighlightedText = (content, term) => {
   if (!term || !content) return content;
@@ -145,40 +146,33 @@ const [filterMonth, setFilterMonth] = useState("All");
     localStorage.setItem("dark_mode", darkMode);
   }, [darkMode]);
 
-useEffect(() => {
-    // 1. Define a function to handle the initial startup
-    const initializeApp = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const activeUser = session?.user ?? null;
-        setUser(activeUser);
-        // Wait for logs to actually fetch before moving on
-        await fetchLogs(activeUser);
-      } catch (err) {
-        console.error("Initialization error:", err);
-        await fetchLogs(null); // Fallback to guest data
-      } finally {
-        // Only stop the loading screen once we have a user and their data
-        setLoading(false);
-      }
-    };
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const activeUser = session?.user ?? null;
+      setUser(activeUser);
+      fetchLogs(activeUser);
+      setLoading(false);
+    });
 
-    initializeApp();
-
-    // 2. Listen for login/logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
       
+      if (event === "PASSWORD_RECOVERY") {
+        const newPassword = prompt("Enter your new password:");
+        if (newPassword) {
+          const { error } = await supabase.auth.updateUser({ password: newPassword });
+          if (error) alert(error.message);
+          else alert("Password updated successfully!");
+        }
+      }
+
       if (activeUser) {
         setShowAuthModal(false);
         setAuthMsg(""); 
-        // Refresh logs when a user logs in
-        await fetchLogs(activeUser);
-        await mergeGuestData(activeUser.id);
+        mergeGuestData(activeUser.id);
       } else {
-        // If they log out, revert to guest logs
-        await fetchLogs(null);
+        fetchLogs(null);
       }
     });
 
@@ -301,7 +295,8 @@ useEffect(() => {
     } catch (err) {
       alert(err.message);
     } finally {
-      setIsSaving(false); // Change this to FALSE
+      setIsSaving(true); // Should be false, fixed below
+      setIsSaving(false);
     }
   };
 
@@ -566,7 +561,7 @@ const smallBtn = {
               </form>
             ) : (
               <h3 style={{ margin: 0, fontSize: '18px' }}>
-                {customName ? `${customName}'s stats` : "Your stats"} 
+                {customName ? `${customName}'s Stats` : "Your Stats"} 
                 <button 
                   onClick={() => setIsEditingName(true)} 
                   style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px', fontSize: '14px' }}
