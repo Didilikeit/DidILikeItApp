@@ -33,28 +33,61 @@ const getHighlightedText = (content, term) => {
 // --- COMPONENT: EXPANDABLE NOTE --- [cite: 3-8]
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const isLong = text.length > 120;
-  const displayedText = isLong && !isExpanded ? text.substring(0, 120) + "..." : text;
+
+  // SMART EXPAND: If the search term is found in this note, open it automatically
+  useEffect(() => {
+    if (searchTerm && searchTerm.length > 1) {
+      const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
+      if (text.toLowerCase().includes(highlightTerm)) {
+        setIsExpanded(true);
+      }
+    } else {
+      // Optional: Close it back up when search is cleared
+      setIsExpanded(false);
+    }
+  }, [searchTerm, text]);
+
+  if (!text) return null;
 
   return (
-    <div style={{ 
-      marginTop: "10px", 
-      padding: "12px", 
-      background: isDarkMode ? "#2d2d2d" : "#f9f9f9", 
-      borderRadius: "8px", 
-      fontSize: "14px", 
-      fontStyle: "italic", 
-      borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
-      color: isDarkMode ? "#bbb" : "#555",
-whiteSpace: "pre-wrap"
-    }}>
-      "{getHighlightedText(displayedText, searchTerm)}"
-      {isLong && (
-        <button 
-          onClick={() => setIsExpanded(!isExpanded)} 
-          style={{ background: "none", border: "none", fontSize: "12px", cursor: "pointer", color: "#3498db", fontWeight: "bold", marginLeft: "8px", textDecoration: "underline" }}
+    <div style={{ marginTop: "8px" }}>
+      {isExpanded ? (
+        <div 
+          onClick={() => setIsExpanded(false)}
+          style={{ 
+            fontSize: "14px", 
+            color: isDarkMode ? "#ccc" : "#444", 
+            lineHeight: "1.5",
+            whiteSpace: "pre-wrap", // Keep your line breaks
+            cursor: "pointer",
+            background: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+            padding: "10px",
+            borderRadius: "8px",
+            borderLeft: searchTerm ? "3px solid #3498db" : "none" // Subtle blue line if it's a search match
+          }}
         >
-          {isExpanded ? "Less" : "More"}
+          {getHighlightedText(text, searchTerm)}
+          <div style={{ marginTop: "8px", fontSize: "11px", color: "#3498db", fontWeight: "bold" }}>
+            ↑ Click to hide thoughts
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setIsExpanded(true)}
+          style={{
+            background: "none",
+            border: "none",
+            padding: "4px 0",
+            color: "#3498db",
+            fontSize: "13px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px"
+          }}
+        >
+          <span>💭</span> 
+          <span style={{ textDecoration: "underline" }}>View thoughts</span>
         </button>
       )}
     </div>
