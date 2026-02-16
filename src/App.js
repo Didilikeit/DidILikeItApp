@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -263,7 +264,7 @@ const [filterMonth, setFilterMonth] = useState("All");
     setIsSaving(true);
     
     // Determine if this is moving from Queue/Reading to a finished state
-    const isFinishedVerdict = ["I loved it", "I liked it", "Meh", "I didn't like it"].includes(verdict);
+    const isFinishedVerdict = ["I loved it", "I liked it", "Meh", "I didn't like it", "Currently Reading"].includes(verdict);
     
     const logData = { 
       title: trimmedTitle, 
@@ -355,7 +356,7 @@ const [filterMonth, setFilterMonth] = useState("All");
         return { bg: isDark ? "rgba(255, 152, 0, 0.2)" : "#fff3e0", color: isDark ? "#ffb74d" : "#ef6c00", border: isDark ? "#ff9800" : "#ffe0b2", emoji: "🟡" };
       case "I didn't like it": 
         return { bg: isDark ? "rgba(244, 67, 54, 0.2)" : "#ffebee", color: isDark ? "#e57373" : "#c62828", border: isDark ? "#f44336" : "#ffcdd2", emoji: "🔴" };
-      case "Currently Reading": 
+      case "Currently reading": 
         return { bg: isDark ? "rgba(3, 169, 244, 0.2)" : "#e1f5fe", color: isDark ? "#4fc3f7" : "#01579b", border: isDark ? "#03a9f4" : "#b3e5fc", emoji: "📖" };
       default:
         if (v && v.startsWith("Want to")) {
@@ -386,7 +387,7 @@ const [filterMonth, setFilterMonth] = useState("All");
       const v = log.verdict;
       const type = log.media_type;
       if (statYearFilter !== "All" && logYear !== statYearFilter) return;
-      if (v === "Currently Reading") categories.active++;
+      if (v === "Currently reading") categories.active++;
       else if (v?.startsWith("Want to")) categories.queue++;
       else if (categories[type]) {
         categories[type].total++;
@@ -404,7 +405,7 @@ const [filterMonth, setFilterMonth] = useState("All");
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const isQueue = log.verdict && log.verdict.startsWith("Want to");
-      const isActive = log.verdict === "Currently Reading";
+      const isActive = log.verdict === "Currently reading";
       const logMonthYear = log.logged_at 
         ? new Date(log.logged_at).toLocaleString('default', { month: 'long', year: 'numeric' }) 
         : "";
@@ -720,7 +721,7 @@ const smallBtn = {
                 ...verdictBtn, 
                 flex: 1, 
                 background: (verdict === "Currently reading" || verdict === "Want to watch" || verdict === "Want to listen") ? "#3498db" : theme.input, 
-                color: (verdict === "Currently reading" || verdict === "Want to watch" || verdict === "Want to listen") ? "#fff" : theme.text 
+                color: (verdict === "Currently Reading" || verdict === "Want to watch" || verdict === "Want to listen") ? "#fff" : theme.text 
               }}
             >
               ⏳ {mediaType === "Book" ? "Reading now" : (mediaType === "Movie" ? "Want to watch" : "Want to listen")}
@@ -924,7 +925,7 @@ const smallBtn = {
               {(() => {
                 const dateStr = new Date(log.logged_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
                 if (log.verdict && log.verdict.startsWith("Want to")) return `Added on ${dateStr}`;
-                if (log.verdict === "Currently Reading") return `Started reading on ${dateStr}`;
+                if (log.verdict === "Currently reading") return `Started reading on ${dateStr}`;
                 if (log.media_type === "Book") return `Read on ${dateStr}`;
                 if (log.media_type === "Movie") return `Watched on ${dateStr}`;
                 if (log.media_type === "Album") return `Listened to on ${dateStr}`;
