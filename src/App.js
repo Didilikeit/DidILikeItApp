@@ -33,26 +33,26 @@ const getHighlightedText = (content, term) => {
 // --- COMPONENT: EXPANDABLE NOTE --- [cite: 3-8]
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isClipped, setIsClipped] = useState(false);
   const textRef = useRef(null);
 
-  // 1. SMART AUTO-EXPAND: Open if search matches
+  // 1. SMART PREVIEW SCROLL: If search matches, scroll to it but STAY SMALL
   useEffect(() => {
     if (searchTerm && searchTerm.length > 1) {
       const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
       if (text.toLowerCase().includes(highlightTerm)) {
-        setIsExpanded(true);
+        // We don't force isExpanded to true anymore! 
+        // We just ensure the small 4-line box shows the word.
+        setTimeout(() => {
+          if (textRef.current) {
+            const highlight = textRef.current.querySelector('mark');
+            if (highlight) {
+              highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }, 150);
       }
     }
   }, [searchTerm, text]);
-
-  // 2. CLIP DETECTION: Check if the text is actually hitting the "2-line" limit
-  useEffect(() => {
-    if (textRef.current && !isExpanded) {
-      const hasOverflow = textRef.current.scrollHeight > textRef.current.offsetHeight;
-      setIsClipped(hasOverflow);
-    }
-  }, [text, isExpanded]);
 
   if (!text) return null;
 
@@ -70,33 +70,48 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   };
 
   const textWrapperStyle = {
-    display: isExpanded ? "block" : "-webkit-box",
-    WebkitLineClamp: isExpanded ? "unset" : "2",
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
+    display: "block",
+    overflow: "auto", // Allows scrolling inside the 4-line window
     whiteSpace: "pre-wrap",
+    // 4 lines calculation: lineHeight (1.5) * fontSize (12px) * 4 = 84px
+    height: isExpanded ? "auto" : "84px", 
+    maxHeight: isExpanded ? "400px" : "84px",
+    transition: "all 0.3s ease",
+    paddingRight: "5px",
+    scrollbarWidth: "none", // Hides scrollbar on Firefox
+    msOverflowStyle: "none", // Hides scrollbar on IE/Edge
   };
 
   return (
     <div style={containerStyle} onClick={() => setIsExpanded(!isExpanded)}>
-      <div ref={textRef} style={textWrapperStyle}>
+      <style>{`
+        /* Hide scrollbar for Chrome/Safari */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
+      
+      <div 
+        ref={textRef} 
+        className="no-scrollbar"
+        style={textWrapperStyle}
+      >
         "{getHighlightedText(text, searchTerm)}"
       </div>
       
-      {/* 3. SYNCED TOGGLE: Only shows if dots are visible OR already expanded */}
-      {(isClipped || isExpanded) && (
-        <div 
-          style={{ 
-            marginTop: "8px", 
-            fontSize: "11px", 
-            color: "#3498db", 
-            fontWeight: "bold",
-            textDecoration: "underline"
-          }}
-        >
-          {isExpanded ? "↑ Show less" : "↓ Read more"}
-        </div>
-      )}
+      <div 
+        style={{ 
+          marginTop: "8px", 
+          fontSize: "11px", 
+          color: "#3498db", 
+          fontWeight: "bold",
+          display: "flex",
+          justifyContent: "space-between"
+        }}
+      >
+        <span>{isExpanded ? "↑ Show less" : "↓ Expand full note"}</span>
+        {!isExpanded && searchTerm && text.toLowerCase().includes(searchTerm.toLowerCase()) && (
+          <span style={{ color: "#e67e22" }}>🎯 Match found below</span>
+        )}
+      </div>
     </div>
   );
 };
