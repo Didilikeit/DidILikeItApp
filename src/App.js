@@ -33,8 +33,10 @@ const getHighlightedText = (content, term) => {
 // --- COMPONENT: EXPANDABLE NOTE --- [cite: 3-8]
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isClipped, setIsClipped] = useState(false);
+  const textRef = useRef(null);
 
-  // 1. SMART AUTO-EXPAND: Open automatically if search matches
+  // 1. SMART AUTO-EXPAND: Open if search matches
   useEffect(() => {
     if (searchTerm && searchTerm.length > 1) {
       const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
@@ -44,49 +46,57 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
     }
   }, [searchTerm, text]);
 
+  // 2. CLIP DETECTION: Check if the text is actually hitting the "2-line" limit
+  useEffect(() => {
+    if (textRef.current && !isExpanded) {
+      const hasOverflow = textRef.current.scrollHeight > textRef.current.offsetHeight;
+      setIsClipped(hasOverflow);
+    }
+  }, [text, isExpanded]);
+
   if (!text) return null;
 
-  // 2. STYLING FOR PREVIEW vs FULL VIEW
-  const noteStyle = {
-    fontSize: "14px",
-    color: isDarkMode ? "#ccc" : "#444",
-    lineHeight: "1.5",
-    whiteSpace: "pre-wrap", // Keeps your line breaks in full view
+  const containerStyle = {
+    marginTop: "10px",
+    padding: "12px",
+    background: isDarkMode ? "#2d2d2d" : "#f9f9f9",
+    borderRadius: "8px",
+    fontSize: "12px",
+    fontStyle: "italic",
+    borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
+    color: isDarkMode ? "#bbb" : "#555",
     cursor: "pointer",
-    transition: "all 0.2s ease",
-    padding: "8px",
-    borderRadius: "6px",
-    background: isExpanded 
-      ? (isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") 
-      : "transparent",
-    
-    // THE PREVIEW MAGIC:
+    lineHeight: "1.5",
+  };
+
+  const textWrapperStyle = {
     display: isExpanded ? "block" : "-webkit-box",
-    WebkitLineClamp: isExpanded ? "unset" : "2", // Change "2" to how many lines you want to see
+    WebkitLineClamp: isExpanded ? "unset" : "2",
     WebkitBoxOrient: "vertical",
     overflow: "hidden",
+    whiteSpace: "pre-wrap",
   };
 
   return (
-    <div style={{ marginTop: "8px" }}>
-      <div onClick={() => setIsExpanded(!isExpanded)} style={noteStyle}>
-        {getHighlightedText(text, searchTerm)}
+    <div style={containerStyle} onClick={() => setIsExpanded(!isExpanded)}>
+      <div ref={textRef} style={textWrapperStyle}>
+        "{getHighlightedText(text, searchTerm)}"
       </div>
       
-      {/* 3. SUBTLE TOGGLE LABEL */}
-      <div 
-        onClick={() => setIsExpanded(!isExpanded)}
-        style={{ 
-          fontSize: "11px", 
-          color: "#3498db", 
-          fontWeight: "bold", 
-          marginTop: "4px", 
-          cursor: "pointer",
-          paddingLeft: "8px"
-        }}
-      >
-        {isExpanded ? "↑ Show less" : "↓ Read more"}
-      </div>
+      {/* 3. SYNCED TOGGLE: Only shows if dots are visible OR already expanded */}
+      {(isClipped || isExpanded) && (
+        <div 
+          style={{ 
+            marginTop: "8px", 
+            fontSize: "11px", 
+            color: "#3498db", 
+            fontWeight: "bold",
+            textDecoration: "underline"
+          }}
+        >
+          {isExpanded ? "↑ Show less" : "↓ Read more"}
+        </div>
+      )}
     </div>
   );
 };
