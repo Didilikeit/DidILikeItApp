@@ -46,6 +46,7 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
       fontStyle: "italic", 
       borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
       color: isDarkMode ? "#bbb" : "#555"
+whiteSpace: "pre-wrap"
     }}>
       "{getHighlightedText(displayedText, searchTerm)}"
       {isLong && (
