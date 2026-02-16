@@ -34,62 +34,59 @@ const getHighlightedText = (content, term) => {
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // SMART EXPAND: If the search term is found in this note, open it automatically
+  // 1. SMART AUTO-EXPAND: Open automatically if search matches
   useEffect(() => {
     if (searchTerm && searchTerm.length > 1) {
       const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
       if (text.toLowerCase().includes(highlightTerm)) {
         setIsExpanded(true);
       }
-    } else {
-      // Optional: Close it back up when search is cleared
-      setIsExpanded(false);
     }
   }, [searchTerm, text]);
 
   if (!text) return null;
 
+  // 2. STYLING FOR PREVIEW vs FULL VIEW
+  const noteStyle = {
+    fontSize: "14px",
+    color: isDarkMode ? "#ccc" : "#444",
+    lineHeight: "1.5",
+    whiteSpace: "pre-wrap", // Keeps your line breaks in full view
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    padding: "8px",
+    borderRadius: "6px",
+    background: isExpanded 
+      ? (isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") 
+      : "transparent",
+    
+    // THE PREVIEW MAGIC:
+    display: isExpanded ? "block" : "-webkit-box",
+    WebkitLineClamp: isExpanded ? "unset" : "2", // Change "2" to how many lines you want to see
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  };
+
   return (
     <div style={{ marginTop: "8px" }}>
-      {isExpanded ? (
-        <div 
-          onClick={() => setIsExpanded(false)}
-          style={{ 
-            fontSize: "14px", 
-            color: isDarkMode ? "#ccc" : "#444", 
-            lineHeight: "1.5",
-            whiteSpace: "pre-wrap", // Keep your line breaks
-            cursor: "pointer",
-            background: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-            padding: "10px",
-            borderRadius: "8px",
-            borderLeft: searchTerm ? "3px solid #3498db" : "none" // Subtle blue line if it's a search match
-          }}
-        >
-          {getHighlightedText(text, searchTerm)}
-          <div style={{ marginTop: "8px", fontSize: "11px", color: "#3498db", fontWeight: "bold" }}>
-            ↑ Click to hide thoughts
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setIsExpanded(true)}
-          style={{
-            background: "none",
-            border: "none",
-            padding: "4px 0",
-            color: "#3498db",
-            fontSize: "13px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px"
-          }}
-        >
-          <span>💭</span> 
-          <span style={{ textDecoration: "underline" }}>View thoughts</span>
-        </button>
-      )}
+      <div onClick={() => setIsExpanded(!isExpanded)} style={noteStyle}>
+        {getHighlightedText(text, searchTerm)}
+      </div>
+      
+      {/* 3. SUBTLE TOGGLE LABEL */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{ 
+          fontSize: "11px", 
+          color: "#3498db", 
+          fontWeight: "bold", 
+          marginTop: "4px", 
+          cursor: "pointer",
+          paddingLeft: "8px"
+        }}
+      >
+        {isExpanded ? "↑ Show less" : "↓ Read more"}
+      </div>
     </div>
   );
 };
