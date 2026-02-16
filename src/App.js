@@ -30,18 +30,29 @@ const getHighlightedText = (content, term) => {
   );
 };
 
-// --- COMPONENT: EXPANDABLE NOTE --- [cite: 3-8]
+// --- COMPONENT: EXPANDABLE NOTE ---
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showButton, setShowButton] = useState(false); // New state to hide/show "Expand"
   const textRef = useRef(null);
 
-  // 1. SMART PREVIEW SCROLL: If search matches, scroll to it but STAY SMALL
+  // 1. Check if the text is long enough to need an "Expand" button
+  useEffect(() => {
+    if (textRef.current) {
+      // If the actual content height is greater than our 84px limit
+      if (textRef.current.scrollHeight > 84) {
+        setShowButton(true);
+      } else {
+        setShowButton(false);
+      }
+    }
+  }, [text]); // Re-check whenever the text changes
+
+  // 2. SMART PREVIEW SCROLL: If search matches, scroll to it
   useEffect(() => {
     if (searchTerm && searchTerm.length > 1) {
       const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
       if (text.toLowerCase().includes(highlightTerm)) {
-        // We don't force isExpanded to true anymore! 
-        // We just ensure the small 4-line box shows the word.
         setTimeout(() => {
           if (textRef.current) {
             const highlight = textRef.current.querySelector('mark');
@@ -65,50 +76,41 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
     fontStyle: "italic",
     borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
     color: isDarkMode ? "#bbb" : "#555",
-    cursor: "pointer",
+    cursor: showButton ? "pointer" : "default", // Only show pointer if clickable
     lineHeight: "1.5",
   };
 
   const textWrapperStyle = {
     display: "block",
-    overflow: "auto", // Allows scrolling inside the 4-line window
+    overflow: isExpanded ? "visible" : "hidden", // Hide overflow when collapsed
     whiteSpace: "pre-wrap",
-    // 4 lines calculation: lineHeight (1.5) * fontSize (12px) * 4 = 84px
     height: isExpanded ? "auto" : "84px", 
-    maxHeight: isExpanded ? "400px" : "84px",
-    transition: "all 0.3s ease",
+    maxHeight: isExpanded ? "2000px" : "84px", // Increased max height for long reviews
+    transition: "max-height 0.3s ease",
     paddingRight: "5px",
-    scrollbarWidth: "none", // Hides scrollbar on Firefox
-    msOverflowStyle: "none", // Hides scrollbar on IE/Edge
   };
 
   return (
-    <div style={containerStyle} onClick={() => setIsExpanded(!isExpanded)}>
-      <style>{`
-        /* Hide scrollbar for Chrome/Safari */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-      `}</style>
-      
-      <div 
-        ref={textRef} 
-        className="no-scrollbar"
-        style={textWrapperStyle}
-      >
+    <div style={containerStyle} onClick={() => showButton && setIsExpanded(!isExpanded)}>
+      <div ref={textRef} style={textWrapperStyle}>
         "{getHighlightedText(text, searchTerm)}"
       </div>
       
-      <div 
-        style={{ 
-          marginTop: "8px", 
-          fontSize: "11px", 
-          color: "#3498db", 
-          fontWeight: "bold",
-          display: "flex",
-          justifyContent: "space-between"
-        }}
-      >
-        <span>{isExpanded ? "↑ Show less" : "↓ Expand"}</span>
-      </div>
+      {/* Only show the button if the text was actually cut off */}
+      {showButton && (
+        <div 
+          style={{ 
+            marginTop: "8px", 
+            fontSize: "11px", 
+            color: "#3498db", 
+            fontWeight: "bold",
+            display: "flex",
+            justifyContent: "space-between"
+          }}
+        >
+          <span>{isExpanded ? "↑ Show less" : "↓ Expand"}</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -134,6 +136,7 @@ export default function DidILikeItUltimate() {
   const [verdict, setVerdict] = useState("");
   const [year, setYear] = useState("");
   const [manualDate, setManualDate] = useState("");
+const [currentPage, setCurrentPage] = useState("");
   const [editingId, setEditingId] = useState(null);
 
   const [isSaving, setIsSaving] = useState(false); // New Improvement
@@ -341,6 +344,7 @@ const [filterMonth, setFilterMonth] = useState("All");
       media_type: mediaType, 
       verdict, 
       year_released: year || null,
+current_page: currentPage || null,
       // If manually set, use that. If moving to History, set to NOW. Otherwise, let it stay.
       ...(manualDate ? { logged_at: new Date(manualDate).toISOString() } : 
          (isFinishedVerdict ? { logged_at: new Date().toISOString() } : {}))
@@ -372,10 +376,11 @@ const [filterMonth, setFilterMonth] = useState("All");
     }
   };
 
-  const resetForm = () => { // [cite: 52]
-    setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
-    setEditingId(null);
-  };
+  const resetForm = () => {
+  setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict(""); setManualDate("");
+  setCurrentPage(""); // Add this line [cite: 64]
+  setEditingId(null);
+};
 
   const deleteLog = async (id) => { // [cite: 53-55]
     if (window.confirm("Permanently delete this entry?")) {
@@ -771,6 +776,21 @@ const smallBtn = {
           <input placeholder={getMediaStyle(mediaType).creatorLabel} value={creator} onChange={(e) => setCreator(e.target.value)} style={{ ...inputStyle, flex: 2, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
           <input placeholder="Year" value={year} type="number" onChange={(e) => setYear(e.target.value)} style={{ ...inputStyle, flex: 1, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
         </div>
+{/* In your Entry Form section */}
+{mediaType === "Book" && verdict === "Currently reading" && (
+  <input 
+    placeholder="Current Page" 
+    type="text"            // Change from "number" to "text"
+    inputMode="numeric"    // Keeps the number pad on mobile
+    value={currentPage} 
+    onChange={(e) => {
+      // Only allow numbers to be typed
+      const val = e.target.value.replace(/\D/g, '');
+      setCurrentPage(val);
+    }} 
+    style={{ ...inputStyle, background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} 
+  />
+)}
         <div style={{ marginBottom: "10px" }}>
           <label style={{ fontSize: "11px", color: theme.subtext, fontWeight: "bold" }}>LOG DATE (OPTIONAL)</label>
           <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} style={{ ...inputStyle, marginTop: "4px", background: theme.input, color: theme.text, borderColor: darkMode ? "#444" : "#ddd" }} />
@@ -964,6 +984,7 @@ const smallBtn = {
                   setNotes(log.notes || "");
                   setYear(log.year_released || "");
                   setManualDate(log.logged_at ? log.logged_at.split('T')[0] : "");
+setCurrentPage(log.current_page || "");
                   formRef.current?.scrollIntoView({ behavior: 'smooth' }); 
                 }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>✏️</button>
                 <button onClick={() => deleteLog(log.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>🗑️</button>
@@ -981,6 +1002,18 @@ const smallBtn = {
                 {getHighlightedText(log.creator, searchTerm)}
               </div>
             )}
+
+{log.verdict === "Currently reading" && log.current_page && (
+  <div style={{ 
+    fontSize: '12px', 
+    color: '#3498db', 
+    fontWeight: 'bold', 
+    marginTop: '4px',
+    paddingLeft: '8px'
+  }}>
+    📖 Currently on page {log.current_page}
+  </div>
+)}
 
             {log.notes && (
               <div style={{ paddingLeft: '8px' }}>
