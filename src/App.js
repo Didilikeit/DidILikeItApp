@@ -107,10 +107,7 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
           justifyContent: "space-between"
         }}
       >
-        <span>{isExpanded ? "↑ Show less" : "↓ Expand full note"}</span>
-        {!isExpanded && searchTerm && text.toLowerCase().includes(searchTerm.toLowerCase()) && (
-          <span style={{ color: "#e67e22" }}>🎯 Match found below</span>
-        )}
+        <span>{isExpanded ? "↑ Show less" : "↓ Expand"}</span>
       </div>
     </div>
   );
@@ -138,6 +135,7 @@ export default function DidILikeItUltimate() {
   const [year, setYear] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [editingId, setEditingId] = useState(null);
+
   const [isSaving, setIsSaving] = useState(false); // New Improvement
 
   // UI/Filter State [cite: 14-16]
@@ -518,7 +516,7 @@ const [filterMonth, setFilterMonth] = useState("All");
     }).sort((a, b) => {
       if (sortBy === "Title") return (a.title || "").localeCompare(b.title || "");
       if (sortBy === "Verdict") {
-          const order = { "I loved it": 0, "I liked it": 1, "Meh": 2, "I didn't like it": 3, "Currently Reading": 4 };
+          const order = { "I loved it": 0, "I liked it": 1, "Meh": 2, "I didn't like it": 3, "Currently reading": 4 };
           return (order[a.verdict] ?? 99) - (order[b.verdict] ?? 99);
       }
       return new Date(b.logged_at) - new Date(a.logged_at);
