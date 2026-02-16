@@ -147,17 +147,29 @@ const [filterMonth, setFilterMonth] = useState("All");
 
   // --- AUTH & DATA INITIALIZATION --- [cite: 25-28]
   useEffect(() => {
+    // 1. Consolidation of theme persistence
     localStorage.setItem("dark_mode", darkMode);
   }, [darkMode]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const activeUser = session?.user ?? null;
-      setUser(activeUser);
-      fetchLogs(activeUser);
-      setLoading(false);
-    });
+    // 2. The "initAuth" function ensures the loading screen clears even on error
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const activeUser = session?.user ?? null;
+        setUser(activeUser);
+        await fetchLogs(activeUser);
+      } catch (error) {
+        console.error("Initialization failed:", error);
+      } finally {
+        // This is the "Safety Valve" - it runs whether the code above succeeds or fails
+        setLoading(false);
+      }
+    };
 
+    initAuth();
+
+    // 3. The Listener for Login, Logout, and Password Recovery
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
       setUser(activeUser);
@@ -174,8 +186,10 @@ const [filterMonth, setFilterMonth] = useState("All");
       if (activeUser) {
         setShowAuthModal(false);
         setAuthMsg(""); 
-        mergeGuestData(activeUser.id);
+        // Sync guest data to the cloud immediately upon login
+        await mergeGuestData(activeUser.id);
       } else {
+        // If logged out, revert to local storage
         fetchLogs(null);
       }
     });
