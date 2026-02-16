@@ -33,22 +33,21 @@ const getHighlightedText = (content, term) => {
 // --- COMPONENT: EXPANDABLE NOTE ---
 const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showButton, setShowButton] = useState(false); // New state to hide/show "Expand"
+  const [showButton, setShowButton] = useState(false);
   const textRef = useRef(null);
 
-  // 1. Check if the text is long enough to need an "Expand" button
+  // 1. Detect if text is long enough to need the "Expand" button
   useEffect(() => {
     if (textRef.current) {
-      // If the actual content height is greater than our 84px limit
       if (textRef.current.scrollHeight > 84) {
         setShowButton(true);
       } else {
         setShowButton(false);
       }
     }
-  }, [text]); // Re-check whenever the text changes
+  }, [text]);
 
-  // 2. SMART PREVIEW SCROLL: If search matches, scroll to it
+  // 2. SMART SCROLL: Centers the highlighted search term within the small box 
   useEffect(() => {
     if (searchTerm && searchTerm.length > 1) {
       const highlightTerm = searchTerm.replace(/^"|"$/g, '').toLowerCase();
@@ -57,6 +56,7 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
           if (textRef.current) {
             const highlight = textRef.current.querySelector('mark');
             if (highlight) {
+              // This is the magic line that centers your search result 
               highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
           }
@@ -76,38 +76,39 @@ const ExpandableNote = ({ text, isDarkMode, searchTerm }) => {
     fontStyle: "italic",
     borderLeft: `4px solid ${isDarkMode ? "#444" : "#ddd"}`,
     color: isDarkMode ? "#bbb" : "#555",
-    cursor: showButton ? "pointer" : "default", // Only show pointer if clickable
+    cursor: showButton ? "pointer" : "default",
     lineHeight: "1.5",
   };
 
   const textWrapperStyle = {
     display: "block",
-    overflow: isExpanded ? "visible" : "hidden", // Hide overflow when collapsed
     whiteSpace: "pre-wrap",
-    height: isExpanded ? "auto" : "84px", 
-    maxHeight: isExpanded ? "2000px" : "84px", // Increased max height for long reviews
+    // Allows scrolling inside the 84px window when not expanded [cite: 863-864]
+    overflow: isExpanded ? "visible" : "auto", 
+    maxHeight: isExpanded ? "2000px" : "84px", 
     transition: "max-height 0.3s ease",
     paddingRight: "5px",
+    scrollbarWidth: "none", // Hides scrollbar on Firefox [cite: 864]
+    msOverflowStyle: "none", // Hides scrollbar on Edge [cite: 864]
   };
 
   return (
     <div style={containerStyle} onClick={() => showButton && setIsExpanded(!isExpanded)}>
-      <div ref={textRef} style={textWrapperStyle}>
+      <style>{`
+        /* Hide scrollbar for Chrome/Safari to keep it clean  */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
+      
+      <div 
+        ref={textRef} 
+        className="no-scrollbar"
+        style={textWrapperStyle}
+      >
         "{getHighlightedText(text, searchTerm)}"
       </div>
       
-      {/* Only show the button if the text was actually cut off */}
       {showButton && (
-        <div 
-          style={{ 
-            marginTop: "8px", 
-            fontSize: "11px", 
-            color: "#3498db", 
-            fontWeight: "bold",
-            display: "flex",
-            justifyContent: "space-between"
-          }}
-        >
+        <div style={{ marginTop: "8px", fontSize: "11px", color: "#3498db", fontWeight: "bold" }}>
           <span>{isExpanded ? "↑ Show less" : "↓ Expand"}</span>
         </div>
       )}
