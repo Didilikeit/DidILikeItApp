@@ -279,9 +279,158 @@ const MapTab = ({logs,theme,darkMode,getVerdictStyle,onEntryClick,highlightId}) 
   );
 };
 
+
+// ─── GREETING HELPERS ─────────────────────────────────────────────────────────
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if(h<5)  return "Still up?";
+  if(h<12) return "Good morning";
+  if(h<17) return "Good afternoon";
+  if(h<21) return "Good evening";
+  return "Evening";
+};
+const getInsight = (logs, customName) => {
+  const finished = logs.filter(l=>["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict));
+  if(finished.length===0) return "Start logging to see your taste stats here.";
+  const hitRate = Math.round(((finished.filter(l=>["I loved it","I liked it"].includes(l.verdict)).length)/finished.length)*100);
+  const year = new Date().getFullYear();
+  const thisYear = finished.filter(l=>new Date(l.logged_at).getFullYear()===year);
+  const loved = finished.filter(l=>l.verdict==="I loved it").length;
+  const recentLog = finished.sort((a,b)=>new Date(b.logged_at)-new Date(a.logged_at))[0];
+  const daysSince = recentLog ? Math.floor((Date.now()-new Date(recentLog.logged_at))/(1000*60*60*24)) : 999;
+  const insights = [];
+  if(hitRate>=70) insights.push(`You've loved or liked ${hitRate}% of everything you've logged.`);
+  if(thisYear.length>0) insights.push(`${thisYear.length} thing${thisYear.length===1?"":"s"} logged so far this year.`);
+  if(loved>0) insights.push(`${loved} thing${loved===1?"":"s"} you've truly loved.`);
+  if(daysSince===0) insights.push("You logged something today — keep it going.");
+  else if(daysSince===1) insights.push("Last logged yesterday. What's next?");
+  else if(daysSince<=7) insights.push(`Last logged ${daysSince} days ago.`);
+  const expLogs = finished.filter(l=>getCat(l.media_type)==="Experienced");
+  if(expLogs.length>=3) insights.push(`${expLogs.length} real-world experiences logged.`);
+  if(insights.length===0) return `${finished.length} things logged and counted.`;
+  return insights[Math.floor(Date.now()/60000)%insights.length];
+};
+
+// ─── VOICE HOOK ───────────────────────────────────────────────────────────────
+const useVoice = () => {
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [supported, setSupported] = useState(false);
+  const recRef = useRef(null);
+  useEffect(()=>{ setSupported(!!(window.SpeechRecognition||window.webkitSpeechRecognition)); },[]);
+  const start = useCallback((onResult, onEnd) => {
+    const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR) return;
+    const rec = new SR();
+    recRef.current = rec;
+    rec.continuous = true; rec.interimResults = true; rec.lang = "en-GB";
+    let final = "";
+    rec.onresult = e => {
+      let interimStr = "";
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interimStr += e.results[i][0].transcript;
+      }
+      setInterim(interimStr);
+      if(final) onResult(final);
+    };
+    rec.onend = () => { setListening(false); setInterim(""); onEnd && onEnd(); };
+    rec.onerror = () => { setListening(false); setInterim(""); };
+    rec.start(); setListening(true);
+  },[]);
+  const stop = useCallback(()=>{ recRef.current?.stop(); setListening(false); setInterim(""); },[]);
+  return { listening, interim, supported, start, stop };
+};
+
+// ─── MIC BUTTON ──────────────────────────────────────────────────────────────
+const MicButton = ({ currentText, onTextChange, theme, darkMode, size="normal" }) => {
+  const { listening, interim, supported, start, stop } = useVoice();
+  const finalRef = useRef("");
+  if(!supported) return null;
+  const handleToggle = () => {
+    if(listening){ stop(); return; }
+    finalRef.current = "";
+    start(
+      (final) => { finalRef.current = final; },
+      () => {
+        const transcript = finalRef.current.trim();
+        if(!transcript) return;
+        if(currentText && currentText.trim()){
+          const choice = window.confirm("You already have notes.\n\nOK = Add to existing\nCancel = Replace");
+          if(choice) onTextChange(currentText.trim() + " " + transcript);
+          else onTextChange(transcript);
+        } else { onTextChange(transcript); }
+      }
+    );
+  };
+  const sz = size==="small" ? 28 : 34;
+  return(
+    <button onClick={handleToggle} title={listening?"Stop recording":"Record voice note"} style={{width:`${sz}px`,height:`${sz}px`,borderRadius:"50%",border:`1.5px solid ${listening?"#e74c3c":theme.border2}`,background:listening?"rgba(231,76,60,0.12)":"none",color:listening?"#e74c3c":theme.subtext,fontSize:size==="small"?"13px":"15px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.2s",position:"relative",animation:listening?"micpulse 1.2s infinite":"none"}}>
+      {listening ? "⏹" : "🎙"}
+      {listening && interim && (
+        <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",background:darkMode?"#1a1a1a":"#fff",border:`1px solid ${theme.border2}`,borderRadius:"8px",padding:"4px 8px",fontSize:"10px",color:theme.subtext2,whiteSpace:"nowrap",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",boxShadow:"0 2px 8px rgba(0,0,0,0.2)",zIndex:10,fontStyle:"italic"}}>
+          {interim}
+        </div>
+      )}
+      <style>{`@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,0.4)}50%{box-shadow:0 0 0 6px rgba(231,76,60,0)}}`}</style>
+    </button>
+  );
+};
+
+// ─── NOTES FULL-SCREEN MODAL ─────────────────────────────────────────────────
+const NotesModal = ({ log, theme, darkMode, onClose, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(log.notes||"");
+  const color = VERDICT_MAP_COLOR(log.verdict);
+  const ss = getSubtypeStyle(log.media_type);
+  const handleCopy = () => { navigator.clipboard?.writeText(log.notes||"").then(()=>alert("Copied to clipboard!")).catch(()=>{}); };
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:theme.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:"500px",maxHeight:"92vh",display:"flex",flexDirection:"column",border:`1px solid ${theme.border2}`}}>
+        <div style={{width:"36px",height:"4px",background:theme.border2,borderRadius:"2px",margin:"12px auto 0",flexShrink:0}}/>
+        <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${theme.border}`,flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:"700",fontSize:"16px",color:theme.text,lineHeight:"1.3",marginBottom:"5px"}}>{log.title}</div>
+              <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:"10px",color:ss.color,fontWeight:"600"}}>{ss.icon} {log.media_type}</span>
+                <span style={{fontSize:"10px",color,fontWeight:"700"}}>· {log.verdict}</span>
+                {log.creator&&<span style={{fontSize:"10px",color:theme.subtext}}>· {log.creator}</span>}
+              </div>
+            </div>
+            <button onClick={onClose} style={{background:"none",border:`1px solid ${theme.border}`,color:theme.subtext,borderRadius:"50%",width:"28px",height:"28px",cursor:"pointer",fontSize:"14px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 16px",WebkitOverflowScrolling:"touch"}}>
+          {editing ? (
+            <textarea value={editText} onChange={e=>setEditText(e.target.value)} autoFocus style={{width:"100%",minHeight:"220px",background:"none",border:`1px solid ${theme.border2}`,borderRadius:"10px",padding:"12px",fontSize:"15px",lineHeight:"1.8",color:theme.text,resize:"vertical",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+          ) : (
+            <div style={{fontSize:"16px",color:theme.text,lineHeight:"1.9",fontStyle:"italic",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{log.notes}</div>
+          )}
+        </div>
+        <div style={{padding:"12px 16px",borderTop:`1px solid ${theme.border}`,display:"flex",gap:"8px",flexShrink:0,paddingBottom:"calc(12px + env(safe-area-inset-bottom))"}}>
+          {editing ? (
+            <>
+              <button onClick={()=>{onSave(editText);setEditing(false);}} style={{flex:1,padding:"11px",borderRadius:"10px",border:"none",background:darkMode?"#fff":"#111",color:darkMode?"#000":"#fff",fontWeight:"700",fontSize:"13px",cursor:"pointer"}}>Save</button>
+              <button onClick={()=>{setEditText(log.notes||"");setEditing(false);}} style={{padding:"11px 16px",borderRadius:"10px",border:`1px solid ${theme.border2}`,background:"none",color:theme.subtext,fontSize:"13px",cursor:"pointer"}}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <button onClick={()=>setEditing(true)} style={{flex:1,padding:"11px",borderRadius:"10px",border:`1px solid ${theme.border2}`,background:"none",color:theme.text,fontWeight:"600",fontSize:"13px",cursor:"pointer"}}>✏️ Edit</button>
+              <button onClick={handleCopy} style={{flex:1,padding:"11px",borderRadius:"10px",border:`1px solid ${theme.border2}`,background:"none",color:theme.text,fontWeight:"600",fontSize:"13px",cursor:"pointer"}}>📋 Copy</button>
+              <MicButton currentText={editText} onTextChange={t=>{setEditText(t);setEditing(true);}} theme={theme} darkMode={darkMode} size="small"/>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── MEDIA CARD ───────────────────────────────────────────────────────────────
-const MediaCard = ({log,theme,darkMode,getVerdictStyle,onEdit,onDelete,searchTerm,collection,onMapClick}) => {
+const MediaCard = ({log,theme,darkMode,getVerdictStyle,onEdit,onDelete,searchTerm,collection,onMapClick,onNotesUpdate}) => {
   const [isFlipped,setIsFlipped]=React.useState(false);
+  const [showNotesModal,setShowNotesModal]=React.useState(false);
   const vs=getVerdictStyle(log.verdict);
   const ss=getSubtypeStyle(log.media_type);
   const isExp=ss.cat==="Experienced";
@@ -325,7 +474,9 @@ const MediaCard = ({log,theme,darkMode,getVerdictStyle,onEdit,onDelete,searchTer
   );
 
   return(
-    <div style={{perspective:"1000px"}}>
+    <>
+      {showNotesModal&&<NotesModal log={log} theme={theme} darkMode={darkMode} onClose={()=>setShowNotesModal(false)} onSave={text=>{onNotesUpdate&&onNotesUpdate(log.id,text);setShowNotesModal(false);}}/>}
+      <div style={{perspective:"1000px"}}>
       <div style={{position:"relative",width:"100%",transformStyle:"preserve-3d",transition:"transform 0.5s ease",transform:isFlipped?"rotateY(180deg)":"rotateY(0deg)"}}>
         <div style={{backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",background:theme.card,borderRadius:"14px",overflow:"hidden",border:`1px solid ${theme.border}`,display:"flex",flexDirection:"column"}}>
           <MetaHeader showFlipBtn={false}/>
@@ -343,9 +494,14 @@ const MediaCard = ({log,theme,darkMode,getVerdictStyle,onEdit,onDelete,searchTer
           <div style={{flex:1,overflowY:"auto",padding:"10px 12px",WebkitOverflowScrolling:"touch",minHeight:0}}>
             <div style={{fontSize:"12px",color:theme.text,lineHeight:"1.7",fontStyle:"italic",borderLeft:`3px solid ${darkMode?"#2a2a2a":"#eee"}`,paddingLeft:"10px",whiteSpace:"pre-wrap"}}>{hl(log.notes,searchTerm)}</div>
           </div>
+          <div style={{padding:"6px 8px",borderTop:`1px solid ${theme.border}`,display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
+            <button onClick={()=>setShowNotesModal(true)} style={{flex:1,padding:"5px",borderRadius:"8px",border:`1px solid ${theme.border}`,background:"none",color:theme.subtext2,fontSize:"10px",fontWeight:"600",cursor:"pointer"}}>⛶ Expand</button>
+            <MicButton currentText={log.notes||""} onTextChange={text=>{onNotesUpdate&&onNotesUpdate(log.id,text);}} theme={theme} darkMode={darkMode} size="small"/>
+          </div>
         </div>
       </div>
     </div>
+    </>
   );
 };
 
@@ -413,7 +569,7 @@ export default function DidILikeIt(){
   const [authMsg,setAuthMsg]=useState("");
   const [logs,setLogs]=useState([]);
   const [collections,setCollections]=useState(()=>{try{return JSON.parse(localStorage.getItem("dili_collections")||"[]");}catch{return[];}});
-  const [activeTab,setActiveTab]=useState("stats");
+  const [activeTab,setActiveTab]=useState("home");
   const [historyView,setHistoryView]=useState("grid");
   const [darkMode,setDarkMode]=useState(()=>{const s=localStorage.getItem("dark_mode");return s!==null?s==="true":true;});
 
@@ -543,6 +699,13 @@ export default function DidILikeIt(){
     else if(at==="books"){setTitle(item.volumeInfo.title);setCreator(item.volumeInfo.authors?.join(", ")||"");const il=item.volumeInfo?.imageLinks;const raw=il?.thumbnail||il?.smallThumbnail||"";setArtwork(raw?raw.replace("zoom=1","zoom=0").replace("http://","https://"):"");setYear(item.volumeInfo.publishedDate?.split("-")[0]||"");setGenre(item.volumeInfo?.categories?.[0]||"");}
     else if(at==="lastfm"){setTitle(item.name);setCreator(item.artist);setArtwork(item.image?(item.image[4]?.["#text"]||item.image[3]?.["#text"]||item.image[2]?.["#text"]||""):"");try{const r=await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.getInfo&api_key=${LAST_FM_KEY}&artist=${encodeURIComponent(item.artist)}&album=${encodeURIComponent(item.name)}&format=json`);const d=await r.json();const rd=d.album?.releasedate?.trim();if(rd){const m=rd.match(/\d{4}/);setYear(m?m[0]:"");}else setYear("");setGenre(d.album?.tags?.tag?.[0]?.name||"");}catch{setYear("");}}
   };
+
+  // Update notes inline without full edit flow
+  const updateNotesInPlace=useCallback(async(id,newNotes)=>{
+    setLogs(prev=>prev.map(l=>l.id===id?{...l,notes:newNotes}:l));
+    if(user){await supabase.from("logs").update({notes:newNotes}).eq("id",id);}
+    else{const cur=JSON.parse(localStorage.getItem("guest_logs")||"[]");localStorage.setItem("guest_logs",JSON.stringify(cur.map(l=>l.id===id?{...l,notes:newNotes}:l)));}
+  },[user]);
 
   const handleSave=async()=>{
     const trimmedTitle=title.trim();if(!trimmedTitle||!verdict)return alert("Title and Verdict are required.");
@@ -689,7 +852,13 @@ export default function DidILikeIt(){
 
         {activeCat==="Read"&&verdict?.startsWith("Currently")&&<input placeholder="Current page" type="text" inputMode="numeric" value={currentPage} onChange={e=>setCurrentPage(e.target.value.replace(/\D/g,""))} style={inputStyle}/>}
         {collections.length>0&&(<div style={{marginBottom:"12px"}}><label style={{fontSize:"10px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:"6px"}}>Collection (optional)</label><select value={collectionId} onChange={e=>setCollectionId(e.target.value)} style={{...inputStyle,marginBottom:0}}><option value="">No collection</option>{collections.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}</select></div>)}
-        <textarea ref={textareaRef} placeholder="My thoughts… (optional)" value={notes} onChange={e=>setNotes(e.target.value)} style={{...inputStyle,height:"60px",overflow:"hidden",resize:"none",marginTop:"4px"}}/>
+        <div style={{marginBottom:"8px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+            <label style={{fontSize:"10px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.08em",textTransform:"uppercase"}}>Thoughts (optional)</label>
+            <MicButton currentText={notes} onTextChange={setNotes} theme={theme} darkMode={darkMode}/>
+          </div>
+          <textarea ref={textareaRef} placeholder="How did it make you feel? What stuck with you?…" value={notes} onChange={e=>setNotes(e.target.value)} style={{...inputStyle,height:"60px",overflow:"hidden",resize:"none",marginBottom:0}}/>
+        </div>
         <div style={{marginBottom:"16px"}}><label style={{fontSize:"10px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:"6px"}}>Log date (optional)</label><input type="date" value={manualDate} onChange={e=>setManualDate(e.target.value)} style={inputStyle}/></div>
         <div style={{marginBottom:"20px"}}>
           <label style={{fontSize:"10px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:"8px"}}>Your verdict</label>
@@ -756,7 +925,7 @@ export default function DidILikeIt(){
                       <span style={{fontSize:"12px",color:theme.subtext,display:"inline-block",transition:"transform 0.2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>⌄</span>
                     </div>
                   </div>
-                  {isOpen&&(<div style={{borderTop:`1px solid ${theme.border}`,padding:"12px"}}>{collLogs.length===0?<div style={{textAlign:"center",padding:"20px",color:theme.subtext,fontSize:"12px"}}>No entries yet.</div>:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>{collLogs.map(log=><MediaCard key={log.id} log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} searchTerm="" collection={collections.find(c=>c.id===log.collection_id)} onMapClick={handleMapClick} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/>)}</div>}</div>)}
+                  {isOpen&&(<div style={{borderTop:`1px solid ${theme.border}`,padding:"12px"}}>{collLogs.length===0?<div style={{textAlign:"center",padding:"20px",color:theme.subtext,fontSize:"12px"}}>No entries yet.</div>:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>{collLogs.map(log=><MediaCard key={log.id} log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} searchTerm="" collection={collections.find(c=>c.id===log.collection_id)} onMapClick={handleMapClick} onNotesUpdate={updateNotesInPlace} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/>)}</div>}</div>)}
                 </div>
               );})}
             </div>
@@ -767,7 +936,7 @@ export default function DidILikeIt(){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
             {filteredHistory.map((log,i)=>(
               <div key={log.id} ref={(savedEntryId==="latest"&&i===0)||savedEntryId===log.id?savedEntryRef:i===0?firstMatchRef:null}>
-                <MediaCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} searchTerm={historySearch} collection={collections.find(c=>c.id===log.collection_id)} onMapClick={handleMapClick} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/>
+                <MediaCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} searchTerm={historySearch} collection={collections.find(c=>c.id===log.collection_id)} onMapClick={handleMapClick} onNotesUpdate={updateNotesInPlace} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/>
               </div>
             ))}
           </div>
@@ -777,9 +946,9 @@ export default function DidILikeIt(){
   );
 
   // ═══════════════════════════════════════════
-  // TAB: STATS
+  // TAB: HOME + STATS
   // ═══════════════════════════════════════════
-  const renderStats=()=>{
+  const renderHome=()=>{
     const finishedLogs=logs.filter(l=>{if(statYearFilter!=="All"&&new Date(l.logged_at).getFullYear().toString()!==statYearFilter)return false;return["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict);});
     const total=finishedLogs.length||1;const hitCount=finishedLogs.filter(l=>l.verdict==="I loved it"||l.verdict==="I liked it").length;const hitRate=Math.round((hitCount/total)*100);
     const creatorCount={};finishedLogs.forEach(l=>{if(!l.creator)return;const k=`${l.creator}|||${l.media_type}`;creatorCount[k]=(creatorCount[k]||0)+1;});
@@ -788,61 +957,123 @@ export default function DidILikeIt(){
     const topMonth=Object.entries(monthCount).sort((a,b)=>b[1]-a[1])[0];const maxMonth=topMonth?.[1]||1;
     const last12=Array.from({length:12},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-(11-i));const k=d.toLocaleString("default",{month:"long",year:"numeric"});return{key:k,label:d.toLocaleString("default",{month:"short"})[0],count:monthCount[k]||0};});
     const card={background:theme.card,border:`1px solid ${theme.border}`,borderRadius:"16px",padding:"16px"};
+    const greeting=getGreeting();
+    const firstName=customName?customName.split(" ")[0]:null;
+    const insight=getInsight(logs,customName);
+    const recentLogs=logs.filter(l=>["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict)).slice(0,3);
     return(
-      <div style={{padding:"20px 16px 100px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"20px"}}>
-          <div>
-            {isEditingName?(<form onSubmit={e=>{e.preventDefault();saveName();}} style={{display:"flex",gap:"6px",alignItems:"center"}}><input value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Your name…" autoFocus style={{...inputStyle,width:"130px",padding:"6px 10px",fontSize:"14px",marginBottom:0}}/><button type="submit" style={{background:"none",border:"none",color:"#27ae60",fontSize:"16px",cursor:"pointer"}}>✅</button></form>):(
-              <div style={{fontSize:"22px",fontWeight:"700",letterSpacing:"-0.5px",color:theme.text}}>{customName?`${customName}'s `:"Your "}<span style={{fontStyle:"italic",fontWeight:"300",color:theme.subtext}}>stats</span><button onClick={()=>setIsEditingName(true)} style={{background:"none",border:"none",cursor:"pointer",marginLeft:"6px",fontSize:"13px"}}>✏️</button></div>
-            )}
-            <select value={statYearFilter} onChange={e=>setStatYearFilter(e.target.value)} style={{background:"none",border:"none",color:"#3498db",fontWeight:"600",fontSize:"11px",cursor:"pointer",outline:"none",marginTop:"4px"}}>{availableYears.map(y=><option key={y} value={y}>{y==="All"?"All time":y}</option>)}</select>
+      <div style={{padding:"0 0 100px"}}>
+        {/* ── HERO ── */}
+        <div style={{padding:"20px 16px 0",marginBottom:"16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}>
+            <div style={{flex:1}}>
+              {isEditingName?(
+                <form onSubmit={e=>{e.preventDefault();saveName();}} style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <input value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Your name…" autoFocus style={{...inputStyle,width:"140px",padding:"7px 10px",fontSize:"14px",marginBottom:0}}/>
+                  <button type="submit" style={{background:"none",border:"none",color:"#27ae60",fontSize:"18px",cursor:"pointer"}}>✅</button>
+                </form>
+              ):(
+                <div>
+                  <div style={{fontSize:"13px",color:theme.subtext,marginBottom:"2px"}}>{greeting}{firstName?`, ${firstName}`:""}</div>
+                  <div style={{fontSize:"22px",fontWeight:"800",letterSpacing:"-0.5px",color:theme.text,lineHeight:"1.2"}}>
+                    Did I Like It<span style={{color:"#3498db"}}>?</span>
+                    <button onClick={()=>setIsEditingName(true)} style={{background:"none",border:"none",cursor:"pointer",marginLeft:"6px",fontSize:"12px",opacity:0.4}}>✏️</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{display:"flex",gap:"5px",flexShrink:0}}>
+              <button onClick={()=>setActiveTab("queue")} style={{display:"flex",alignItems:"center",gap:"4px",fontSize:"10px",fontWeight:"600",padding:"5px 9px",borderRadius:"20px",border:`1px solid ${theme.border2}`,background:"none",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:"#4fc3f7",flexShrink:0}}/>{stats.active}</button>
+              <button onClick={()=>setActiveTab("queue")} style={{display:"flex",alignItems:"center",gap:"4px",fontSize:"10px",fontWeight:"600",padding:"5px 9px",borderRadius:"20px",border:`1px solid ${theme.border2}`,background:"none",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:"#ce93d8",flexShrink:0}}/>{stats.queue}</button>
+            </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"5px"}}>
-            <button onClick={()=>setActiveTab("queue")} style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"10px",fontWeight:"600",padding:"5px 11px",borderRadius:"20px",border:`1px solid ${theme.border2}`,background:"none",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:"#4fc3f7",flexShrink:0}}/>{stats.active} active</button>
-            <button onClick={()=>setActiveTab("queue")} style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"10px",fontWeight:"600",padding:"5px 11px",borderRadius:"20px",border:`1px solid ${theme.border2}`,background:"none",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:"#ce93d8",flexShrink:0}}/>{stats.queue} queued</button>
+
+          {/* Insight card */}
+          <div style={{background:theme.card,border:`1px solid ${theme.border}`,borderRadius:"12px",padding:"12px 14px",marginBottom:"14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+            <span style={{fontSize:"18px",flexShrink:0,marginTop:"1px"}}>💡</span>
+            <div style={{fontSize:"13px",color:theme.subtext2,lineHeight:"1.5",flex:1}}>{insight}</div>
           </div>
+
+          {/* Quick log button */}
+          <button onClick={()=>setActiveTab("log")} style={{width:"100%",padding:"15px",borderRadius:"14px",border:"none",background:`linear-gradient(135deg,#3498db,#9b59b6)`,color:"#fff",fontWeight:"700",fontSize:"15px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",letterSpacing:"-0.2px",boxShadow:"0 4px 20px rgba(52,152,219,0.3)"}}>
+            <span style={{fontSize:"20px"}}>＋</span> Log something
+          </button>
         </div>
-        <div style={{...card,marginBottom:"10px",position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:0,left:0,right:0,height:"1px",background:`linear-gradient(90deg,${CATEGORIES.Watched.color},${CATEGORIES.Read.color},${CATEGORIES.Listened.color},${CATEGORIES.Experienced.color})`}}/>
-          <div style={{display:"flex",alignItems:"flex-end",gap:"10px",marginBottom:"6px"}}>
-            <div style={{fontSize:"56px",fontWeight:"800",lineHeight:1,letterSpacing:"-3px",color:theme.text}}>{Object.values(CATEGORIES).reduce((s,_,i)=>{const k=Object.keys(CATEGORIES)[i];return s+(stats[k]?.total||0);},0)}</div>
-            <div style={{paddingBottom:"8px",color:theme.subtext,fontSize:"14px",lineHeight:"1.3"}}>things<br/>logged</div>
+
+        {/* ── RECENTLY LOGGED ── */}
+        {recentLogs.length>0&&(
+          <div style={{padding:"0 16px",marginBottom:"16px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+              <div style={{fontSize:"11px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.1em",textTransform:"uppercase"}}>Recently logged</div>
+              <button onClick={()=>setActiveTab("history")} style={{background:"none",border:"none",color:"#3498db",fontSize:"11px",fontWeight:"600",cursor:"pointer"}}>See all →</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+              {recentLogs.map(log=>{const vs2=getVerdictStyle(log.verdict);const ss2=getSubtypeStyle(log.media_type);return(
+                <div key={log.id} onClick={()=>{setActiveTab("history");setSavedEntryId(log.id);}} style={{background:theme.card,border:`1px solid ${theme.border}`,borderRadius:"12px",padding:"10px 12px",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}}>
+                  <div style={{width:"36px",height:"50px",borderRadius:"7px",overflow:"hidden",flexShrink:0,background:darkMode?"#1a1a1a":"#eee",display:"flex",alignItems:"center",justifyContent:"center"}}>{log.artwork?<img src={log.artwork} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>:<span style={{fontSize:"18px"}}>{ss2.icon}</span>}</div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontWeight:"700",fontSize:"13px",color:theme.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{log.title}</div><div style={{fontSize:"10px",color:theme.subtext,marginTop:"2px"}}>{ss2.icon} {log.media_type}{log.creator?` · ${log.creator}`:""}</div></div>
+                  <span style={{fontSize:"9px",fontWeight:"700",padding:"2px 7px",borderRadius:"20px",border:`1px solid ${vs2.border}`,background:vs2.bg,color:vs2.color,flexShrink:0,whiteSpace:"nowrap"}}>{vs2.emoji} {log.verdict}</span>
+                </div>
+              );})}
+            </div>
           </div>
-          <div style={{display:"flex",height:"3px",borderRadius:"3px",overflow:"hidden",gap:"2px",marginBottom:"10px"}}>
-            {Object.entries(CATEGORIES).map(([cat,def])=>{const t=stats[cat]?.total||0;return t>0?<div key={cat} style={{flex:t,background:def.color,borderRadius:"3px"}}/>:null;})}
+        )}
+
+        {/* ── STATS DIVIDER ── */}
+        <div style={{padding:"0 16px",marginBottom:"14px",display:"flex",alignItems:"center",gap:"10px"}}>
+          <div style={{height:"1px",flex:1,background:theme.border}}/>
+          <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+            <span style={{fontSize:"10px",fontWeight:"700",color:theme.subtext,letterSpacing:"0.12em",textTransform:"uppercase"}}>Stats</span>
+            <select value={statYearFilter} onChange={e=>setStatYearFilter(e.target.value)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:"20px",color:"#3498db",fontWeight:"600",fontSize:"10px",cursor:"pointer",outline:"none",padding:"3px 8px"}}>{availableYears.map(y=><option key={y} value={y}>{y==="All"?"All time":y}</option>)}</select>
           </div>
-          <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
-            {Object.entries(CATEGORIES).map(([cat,def])=>(<div key={cat} onClick={()=>{setFilterCat(cat);setVerdictFilter("");setActiveTab("history");}} style={{display:"flex",alignItems:"center",gap:"4px",cursor:"pointer"}}><div style={{width:"6px",height:"6px",borderRadius:"50%",background:def.color}}/><span style={{fontSize:"10px",color:theme.subtext2}}>{def.icon} {stats[cat]?.total||0}</span></div>))}
-          </div>
+          <div style={{height:"1px",flex:1,background:theme.border}}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"10px"}}>
-          <div style={{...card,position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${hitRate}%`,background:`linear-gradient(to top,rgba(241,196,15,0.06),transparent)`,borderRadius:"0 0 16px 16px"}}/>
-            <div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"6px"}}>Hit rate</div>
-            <div style={{fontSize:"40px",fontWeight:"800",lineHeight:1,letterSpacing:"-2px",color:"#f1c40f"}}>{hitRate}%</div>
-            <div style={{height:"2px",background:theme.border,borderRadius:"2px",overflow:"hidden",margin:"10px 0 6px"}}><div style={{height:"100%",width:`${hitRate}%`,background:"linear-gradient(90deg,#4caf50,#f1c40f)",borderRadius:"2px"}}/></div>
-            <div style={{fontSize:"10px",color:theme.subtext}}>loved or liked</div>
+
+        <div style={{padding:"0 16px"}}>
+          {/* TOTAL */}
+          <div style={{...card,marginBottom:"10px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:"1px",background:`linear-gradient(90deg,${CATEGORIES.Watched.color},${CATEGORIES.Read.color},${CATEGORIES.Listened.color},${CATEGORIES.Experienced.color})`}}/>
+            <div style={{display:"flex",alignItems:"flex-end",gap:"10px",marginBottom:"6px"}}>
+              <div style={{fontSize:"56px",fontWeight:"800",lineHeight:1,letterSpacing:"-3px",color:theme.text}}>{Object.keys(CATEGORIES).reduce((s,k)=>s+(stats[k]?.total||0),0)}</div>
+              <div style={{paddingBottom:"8px",color:theme.subtext,fontSize:"14px",lineHeight:"1.3"}}>things<br/>logged</div>
+            </div>
+            <div style={{display:"flex",height:"3px",borderRadius:"3px",overflow:"hidden",gap:"2px",marginBottom:"10px"}}>{Object.entries(CATEGORIES).map(([cat,def])=>{const t=stats[cat]?.total||0;return t>0?<div key={cat} style={{flex:t,background:def.color,borderRadius:"3px"}}/>:null;})}</div>
+            <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>{Object.entries(CATEGORIES).map(([cat,def])=>(<div key={cat} onClick={()=>{setFilterCat(cat);setVerdictFilter("");setActiveTab("history");}} style={{display:"flex",alignItems:"center",gap:"4px",cursor:"pointer"}}><div style={{width:"6px",height:"6px",borderRadius:"50%",background:def.color}}/><span style={{fontSize:"10px",color:theme.subtext2}}>{def.icon} {stats[cat]?.total||0}</span></div>))}</div>
           </div>
-          <div style={{...card}}><div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"6px"}}>Top creator</div>{topCreator?(<><div style={{fontSize:"14px",fontWeight:"700",color:theme.text,lineHeight:"1.4",marginBottom:"4px"}}>{topCreator.name}</div><div style={{fontSize:"10px",color:theme.subtext}}>{topCreator.count} logged</div></>):<div style={{fontSize:"11px",color:theme.subtext,marginTop:"8px"}}>Log more to see</div>}</div>
-        </div>
-        <div style={{marginBottom:"10px"}}>
-          <div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"8px",paddingLeft:"2px"}}>By category</div>
-          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-            {Object.entries(CATEGORIES).map(([cat,def])=>{const s=stats[cat]||{total:0,loved:0,liked:0,meh:0,no:0};return(
-              <div key={cat} onClick={()=>{setFilterCat(cat);setVerdictFilter("");setActiveTab("history");}} style={{...card,cursor:"pointer",padding:"12px 14px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}><div style={{display:"flex",alignItems:"center",gap:"7px"}}><span style={{fontSize:"15px"}}>{def.icon}</span><span style={{fontSize:"13px",fontWeight:"600",color:theme.text}}>{cat}</span></div><span style={{fontSize:"22px",fontWeight:"800",color:def.color,letterSpacing:"-1px"}}>{s.total}</span></div>
-                <div style={{display:"flex",height:"3px",borderRadius:"3px",overflow:"hidden",gap:"1px",marginBottom:"8px"}}>{s.loved>0&&<div style={{flex:s.loved,background:"#f1c40f"}}/>}{s.liked>0&&<div style={{flex:s.liked,background:"#4caf50"}}/>}{s.meh>0&&<div style={{flex:s.meh,background:"#ff9800"}}/>}{s.no>0&&<div style={{flex:s.no,background:"#e74c3c"}}/>}</div>
-                <div style={{display:"flex",gap:"10px"}}>{[{val:s.loved,c:"#f1c40f",l:"I loved it"},{val:s.liked,c:"#4caf50",l:"I liked it"},{val:s.meh,c:"#ff9800",l:"Meh"},{val:s.no,c:"#e74c3c",l:"I didn't like it"}].map((item,idx)=>(<div key={idx} onClick={e=>{e.stopPropagation();setFilterCat(cat);setVerdictFilter(item.l);setActiveTab("history");}} style={{display:"flex",alignItems:"center",gap:"3px",fontSize:"10px",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:item.c,flexShrink:0}}/>{item.val}</div>))}</div>
-              </div>
-            );})}
+          {/* HIT RATE + TOP CREATOR */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"10px"}}>
+            <div style={{...card,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${hitRate}%`,background:`linear-gradient(to top,rgba(241,196,15,0.06),transparent)`,borderRadius:"0 0 16px 16px"}}/>
+              <div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"6px"}}>Hit rate</div>
+              <div style={{fontSize:"40px",fontWeight:"800",lineHeight:1,letterSpacing:"-2px",color:"#f1c40f"}}>{hitRate}%</div>
+              <div style={{height:"2px",background:theme.border,borderRadius:"2px",overflow:"hidden",margin:"10px 0 6px"}}><div style={{height:"100%",width:`${hitRate}%`,background:"linear-gradient(90deg,#4caf50,#f1c40f)",borderRadius:"2px"}}/></div>
+              <div style={{fontSize:"10px",color:theme.subtext}}>loved or liked</div>
+            </div>
+            <div style={{...card}}><div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"6px"}}>Top creator</div>{topCreator?(<><div style={{fontSize:"14px",fontWeight:"700",color:theme.text,lineHeight:"1.4",marginBottom:"4px"}}>{topCreator.name}</div><div style={{fontSize:"10px",color:theme.subtext}}>{topCreator.count} logged</div></>):<div style={{fontSize:"11px",color:theme.subtext,marginTop:"8px"}}>Log more to see</div>}</div>
           </div>
+          {/* CATEGORY BREAKDOWN */}
+          <div style={{marginBottom:"10px"}}>
+            <div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"8px",paddingLeft:"2px"}}>By category</div>
+            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+              {Object.entries(CATEGORIES).map(([cat,def])=>{const s=stats[cat]||{total:0,loved:0,liked:0,meh:0,no:0};return(
+                <div key={cat} onClick={()=>{setFilterCat(cat);setVerdictFilter("");setActiveTab("history");}} style={{...card,cursor:"pointer",padding:"12px 14px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}><div style={{display:"flex",alignItems:"center",gap:"7px"}}><span style={{fontSize:"15px"}}>{def.icon}</span><span style={{fontSize:"13px",fontWeight:"600",color:theme.text}}>{cat}</span></div><span style={{fontSize:"22px",fontWeight:"800",color:def.color,letterSpacing:"-1px"}}>{s.total}</span></div>
+                  <div style={{display:"flex",height:"3px",borderRadius:"3px",overflow:"hidden",gap:"1px",marginBottom:"8px"}}>{s.loved>0&&<div style={{flex:s.loved,background:"#f1c40f"}}/>}{s.liked>0&&<div style={{flex:s.liked,background:"#4caf50"}}/>}{s.meh>0&&<div style={{flex:s.meh,background:"#ff9800"}}/>}{s.no>0&&<div style={{flex:s.no,background:"#e74c3c"}}/>}</div>
+                  <div style={{display:"flex",gap:"10px"}}>{[{val:s.loved,c:"#f1c40f",l:"I loved it"},{val:s.liked,c:"#4caf50",l:"I liked it"},{val:s.meh,c:"#ff9800",l:"Meh"},{val:s.no,c:"#e74c3c",l:"I didn't like it"}].map((item,idx)=>(<div key={idx} onClick={e=>{e.stopPropagation();setFilterCat(cat);setVerdictFilter(item.l);setActiveTab("history");}} style={{display:"flex",alignItems:"center",gap:"3px",fontSize:"10px",color:theme.subtext2,cursor:"pointer"}}><span style={{width:"5px",height:"5px",borderRadius:"50%",background:item.c,flexShrink:0}}/>{item.val}</div>))}</div>
+                </div>
+              );})}
+            </div>
+          </div>
+          {/* ACTIVITY BAR */}
+          <div style={{...card,marginBottom:"10px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}><div><div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"4px"}}>Activity</div>{topMonth&&<div style={{fontSize:"14px",fontWeight:"600",color:theme.text}}>{topMonth[0]} was your peak</div>}</div>{topMonth&&<div style={{fontSize:"28px",fontWeight:"800",color:darkMode?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)",letterSpacing:"-1px",lineHeight:1}}>{topMonth[1]}</div>}</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:"44px"}}>{last12.map((m,i)=>(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"3px",height:"100%"}}><div style={{flex:1,width:"100%",display:"flex",alignItems:"flex-end"}}><div style={{width:"100%",height:`${Math.max(4,(m.count/maxMonth)*100)}%`,minHeight:"3px",borderRadius:"3px 3px 0 0",background:topMonth&&m.key===topMonth[0]?"#fff":(darkMode?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.12)")}}/></div><div style={{fontSize:"7px",color:topMonth&&m.key===topMonth[0]?theme.text:theme.subtext}}>{m.label}</div></div>))}</div>
+          </div>
+          {/* ACTIVITY CALENDAR */}
+          <div style={{marginBottom:"10px"}}><ActivityCalendar logs={logs} theme={theme} darkMode={darkMode}/></div>
+          {/* GENRE DNA */}
+          <GenreDNA logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
         </div>
-        <div style={{...card,marginBottom:"10px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}><div><div style={{fontSize:"9px",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.subtext,fontWeight:"700",marginBottom:"4px"}}>Activity</div>{topMonth&&<div style={{fontSize:"14px",fontWeight:"600",color:theme.text}}>{topMonth[0]} was your peak</div>}</div>{topMonth&&<div style={{fontSize:"28px",fontWeight:"800",color:darkMode?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)",letterSpacing:"-1px",lineHeight:1}}>{topMonth[1]}</div>}</div>
-          <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:"44px"}}>{last12.map((m,i)=>(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"3px",height:"100%"}}><div style={{flex:1,width:"100%",display:"flex",alignItems:"flex-end"}}><div style={{width:"100%",height:`${Math.max(4,(m.count/maxMonth)*100)}%`,minHeight:"3px",borderRadius:"3px 3px 0 0",background:topMonth&&m.key===topMonth[0]?"#fff":(darkMode?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.12)")}}/></div><div style={{fontSize:"7px",color:topMonth&&m.key===topMonth[0]?theme.text:theme.subtext,letterSpacing:"0.05em"}}>{m.label}</div></div>))}</div>
-        </div>
-        <div style={{marginBottom:"10px"}}><ActivityCalendar logs={logs} theme={theme} darkMode={darkMode}/></div>
-        <GenreDNA logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
       </div>
     );
   };
@@ -858,7 +1089,7 @@ export default function DidILikeIt(){
       </div>
       {filteredQueue.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:theme.subtext}}><div style={{fontSize:"40px",marginBottom:"12px"}}>⏳</div><div style={{fontSize:"16px",fontWeight:"600",color:theme.text,marginBottom:"6px"}}>Your queue is empty</div><div style={{fontSize:"13px",marginBottom:"20px"}}>Add something you want to read, watch, listen to or experience</div><button onClick={()=>setActiveTab("log")} style={{padding:"12px 24px",borderRadius:"12px",border:"none",background:darkMode?"#fff":"#111",color:darkMode?"#000":"#fff",fontWeight:"600",cursor:"pointer"}}>Add to queue →</button></div>):(
         <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-          {filteredQueue.map((log,i)=>(<div key={log.id} ref={(savedEntryId==="latest"&&i===0)||savedEntryId===log.id?savedEntryRef:null}><QueueCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} onMapClick={handleMapClick} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/></div>))}
+          {filteredQueue.map((log,i)=>(<div key={log.id} ref={(savedEntryId==="latest"&&i===0)||savedEntryId===log.id?savedEntryRef:null}><QueueCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={getVerdictStyle} onMapClick={handleMapClick} onNotesUpdate={updateNotesInPlace} onEdit={()=>startEdit(log)} onDelete={()=>deleteLog(log.id)}/></div>))}
         </div>
       )}
     </div>
@@ -866,7 +1097,7 @@ export default function DidILikeIt(){
 
   if(loading)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:theme.bg,color:theme.subtext,fontSize:"14px"}}>Loading…</div>;
 
-  const tabs=[{id:"stats",icon:"📊",label:"Stats"},{id:"log",icon:"＋",label:"Log"},{id:"history",icon:"📚",label:"History"},{id:"queue",icon:"⏳",label:"Queue"},{id:"map",icon:"🗺",label:"Map"}];
+  const tabs=[{id:"home",icon:"🏠",label:"Home"},{id:"log",icon:"＋",label:"Log"},{id:"history",icon:"📚",label:"History"},{id:"queue",icon:"⏳",label:"Queue"},{id:"map",icon:"🗺",label:"Map"}];
 
   return(
     <div style={{maxWidth:"500px",margin:"0 auto",backgroundColor:theme.bg,color:theme.text,minHeight:"100vh",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",position:"relative"}}>
@@ -912,7 +1143,7 @@ export default function DidILikeIt(){
       </div>
 
       <div>
-        {activeTab==="stats"&&renderStats()}
+        {activeTab==="home"&&renderHome()}
         {activeTab==="log"&&renderLog()}
         {activeTab==="history"&&renderHistory()}
         {activeTab==="queue"&&renderQueue()}
