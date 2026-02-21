@@ -3,13 +3,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// --- DUMMY SETUP FOR PREVIEW ---
-const SUPABASE_URL = "https://placeholder.supabase.co"; 
-const SUPABASE_ANON_KEY = "placeholder"; 
-const supabase = { 
-  auth: { getSession: () => Promise.resolve({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) },
-  from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) })
-};
+// --- ACTUAL SETUP USING VERCEL VARIABLES ---
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL; 
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+// Initialize the real Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- GLOBAL HELPER: BULLETPROOF HIGHLIGHTING --- [cite: 3]
 const getHighlightedText = (content, term) => {
