@@ -43,6 +43,17 @@ export const API_TYPES = {
   "Album":"lastfm",
 };
 
+// ─── PROGRESS TRACKING CONFIG ────────────────────────────────────────────────
+// Which media types support in-progress tracking, and what fields they use
+export const PROGRESS_CONFIG = {
+  "Book":          { type:"pages",    fields:["current_page","total_pages"],   labels:["Current page","Total pages"],    icon:"📖", unit:"pages" },
+  "Audiobook":     { type:"pages",    fields:["current_page","total_pages"],   labels:["Current page","Total pages"],    icon:"🔊", unit:"pages" },
+  "TV Series":     { type:"episodes", fields:["current_episode","total_episodes","current_season"], labels:["Episode","Total episodes","Season"], icon:"📺", unit:"episodes" },
+  "YouTube / Online Series": { type:"episodes", fields:["current_episode","total_episodes","current_season"], labels:["Episode","Total episodes","Season"], icon:"▶️", unit:"episodes" },
+  "Podcast":       { type:"episodes", fields:["current_episode","total_episodes"], labels:["Episode","Total episodes"], icon:"🎙", unit:"episodes" },
+  "Comic / Graphic Novel": { type:"pages", fields:["current_page","total_pages"], labels:["Current issue/page","Total"], icon:"📚", unit:"pages" },
+};
+
 // Derived lookup: subtype -> category name
 export const SUBTYPE_TO_CAT = {};
 Object.entries(CATEGORIES).forEach(([cat, def]) =>

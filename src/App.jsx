@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "./utils/supabase.js";
-import { CATEGORIES, COLL_EMOJIS, API_TYPES, CREATOR_LABELS } from "./utils/constants.js";
+import { CATEGORIES, COLL_EMOJIS, API_TYPES, CREATOR_LABELS, PROGRESS_CONFIG } from "./utils/constants.js";
 import { buildTheme, getVerdictStyle } from "./utils/theme.js";
 import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight } from "./utils/helpers.js";
 import { useLogs } from "./hooks/useLogs.js";
 import { useApiSearch } from "./hooks/useApiSearch.js";
 import { MicButton } from "./components/MicButton.jsx";
-import { MediaCard } from "./components/MediaCard.jsx";
+import { EditorialFeed } from "./components/EditorialCard.jsx";
+import { TasteGenome, TasteRadar, TasteOracle } from "./components/TasteIntelligence.jsx";
+import { BedsideQueue } from "./components/BedsideQueue.jsx";
 import { QueueCard } from "./components/QueueCard.jsx";
 import { ActivityCalendar } from "./components/ActivityCalendar.jsx";
 import { GenreDNA } from "./components/GenreDNA.jsx";
@@ -50,6 +52,10 @@ export default function App() {
   const [year, setYear] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [currentPage, setCurrentPage] = useState("");
+  const [totalPages, setTotalPages] = useState("");
+  const [currentEpisode, setCurrentEpisode] = useState("");
+  const [totalEpisodes, setTotalEpisodes] = useState("");
+  const [currentSeason, setCurrentSeason] = useState("");
   const [artwork, setArtwork] = useState("");
   const [genre, setGenre] = useState("");
   const [locationVenue, setLocationVenue] = useState("");
@@ -281,7 +287,10 @@ export default function App() {
       title: trimmedTitle, creator: creator.trim(), notes: notes.trim(),
       media_type: mediaType, verdict,
       year_released: year || null, artwork: artwork || null,
-      current_page: currentPage || null, genre: genre || null,
+      current_page: currentPage || null, total_pages: totalPages || null,
+      current_episode: currentEpisode || null, total_episodes: totalEpisodes || null,
+      current_season: currentSeason || null,
+      genre: genre || null,
       location_venue: locationVenue.trim() || null, location_city: locationCity.trim() || null,
       lat: locationLat || null, lng: locationLng || null,
       collection_id: collectionId || null,
@@ -300,7 +309,7 @@ export default function App() {
 
   const resetForm = () => {
     setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict("");
-    setManualDate(""); setCurrentPage(""); setArtwork(""); setGenre("");
+    setManualDate(""); setCurrentPage(""); setTotalPages(""); setCurrentEpisode(""); setTotalEpisodes(""); setCurrentSeason(""); setArtwork(""); setGenre("");
     setLocationVenue(""); setLocationCity(""); setLocationLat(null); setLocationLng(null);
     setCollectionId(""); setEditingId(null);
     setSearchResults([]); setSearchQuery(""); setGeoResults([]); setGeoQuery("");
@@ -329,7 +338,10 @@ export default function App() {
     setNotes(log.notes || ""); setYear(log.year_released || "");
     setMediaType(log.media_type); setActiveCat(getCat(log.media_type));
     setVerdict(log.verdict); setArtwork(log.artwork || ""); setGenre(log.genre || "");
-    setCurrentPage(log.current_page || ""); setLocationVenue(log.location_venue || "");
+    setCurrentPage(log.current_page || ""); setTotalPages(log.total_pages || "");
+    setCurrentEpisode(log.current_episode || ""); setTotalEpisodes(log.total_episodes || "");
+    setCurrentSeason(log.current_season || "");
+    setLocationVenue(log.location_venue || "");
     setLocationCity(log.location_city || ""); setLocationLat(log.lat || null);
     setLocationLng(log.lng || null); setCollectionId(log.collection_id || "");
     setActiveTab("log");
@@ -556,6 +568,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* GENOME */}
+          <TasteGenome logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+
           {/* CATEGORY BREAKDOWN */}
           <div style={{ marginBottom:"10px" }}>
             <div style={{ fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase", color:theme.subtext, fontWeight:"700", marginBottom:"8px", paddingLeft:"2px" }}>By category</div>
@@ -587,6 +602,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* RADAR */}
+          <TasteRadar logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+
           {/* ACTIVITY BAR CHART */}
           <div style={{ ...card, marginBottom:"10px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"16px" }}>
@@ -610,6 +628,11 @@ export default function App() {
 
           <div style={{ marginBottom:"10px" }}><ActivityCalendar logs={logs} theme={theme} darkMode={darkMode}/></div>
           <GenreDNA logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+          
+          {/* ORACLE */}
+          <div style={{ marginTop:"10px" }}>
+            <TasteOracle logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+          </div>
         </div>
       </div>
     );
@@ -727,9 +750,57 @@ export default function App() {
           </div>
         )}
 
-        {activeCat === "Read" && verdict?.startsWith("Currently") && (
-          <input placeholder="Current page" type="text" inputMode="numeric" value={currentPage} onChange={e => setCurrentPage(e.target.value.replace(/\D/g,""))} style={inputStyle}/>
-        )}
+        {/* ── PROGRESS TRACKING ── */}
+        {verdict?.startsWith("Currently") && PROGRESS_CONFIG[mediaType] && (() => {
+          const pc = PROGRESS_CONFIG[mediaType];
+          const numOnly = v => v.replace(/\D/g,"");
+          if (pc.type === "pages") return (
+            <div style={{ marginBottom:"12px" }}>
+              <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Progress</label>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <input placeholder="Current page" type="text" inputMode="numeric" value={currentPage} onChange={e => setCurrentPage(numOnly(e.target.value))} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
+                <input placeholder="Total pages" type="text" inputMode="numeric" value={totalPages} onChange={e => setTotalPages(numOnly(e.target.value))} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
+              </div>
+              {currentPage && totalPages && Number(totalPages) > 0 && (
+                <div style={{ marginTop:"8px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", color:theme.subtext, marginBottom:"4px" }}>
+                    <span>Page {currentPage} of {totalPages}</span>
+                    <span>{Math.round((Number(currentPage)/Number(totalPages))*100)}%</span>
+                  </div>
+                  <div style={{ height:"3px", background:theme.border, borderRadius:"2px", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${Math.min(100,Math.round((Number(currentPage)/Number(totalPages))*100))}%`, background:"linear-gradient(90deg,#3498db,#9b59b6)", borderRadius:"2px", transition:"width 0.3s" }}/>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+          if (pc.type === "episodes") return (
+            <div style={{ marginBottom:"12px" }}>
+              <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Progress</label>
+              {pc.fields.includes("current_season") && (
+                <div style={{ display:"flex", gap:"8px", marginBottom:"8px" }}>
+                  <input placeholder="Season" type="text" inputMode="numeric" value={currentSeason} onChange={e => setCurrentSeason(numOnly(e.target.value))} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
+                  <div style={{ flex:2 }}/>
+                </div>
+              )}
+              <div style={{ display:"flex", gap:"8px" }}>
+                <input placeholder="Current episode" type="text" inputMode="numeric" value={currentEpisode} onChange={e => setCurrentEpisode(numOnly(e.target.value))} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
+                <input placeholder="Total episodes" type="text" inputMode="numeric" value={totalEpisodes} onChange={e => setTotalEpisodes(numOnly(e.target.value))} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
+              </div>
+              {currentEpisode && totalEpisodes && Number(totalEpisodes) > 0 && (
+                <div style={{ marginTop:"8px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", color:theme.subtext, marginBottom:"4px" }}>
+                    <span>{currentSeason ? `S${currentSeason} · ` : ""}Ep {currentEpisode} of {totalEpisodes}</span>
+                    <span>{Math.round((Number(currentEpisode)/Number(totalEpisodes))*100)}%</span>
+                  </div>
+                  <div style={{ height:"3px", background:theme.border, borderRadius:"2px", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${Math.min(100,Math.round((Number(currentEpisode)/Number(totalEpisodes))*100))}%`, background:"linear-gradient(90deg,#9b59b6,#e74c3c)", borderRadius:"2px", transition:"width 0.3s" }}/>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {collections.length > 0 && (
           <div style={{ marginBottom:"12px" }}>
@@ -789,7 +860,8 @@ export default function App() {
   // TAB: HISTORY
   // ────────────────────────────────────────────
   const renderHistory = () => (
-    <div style={{ padding:"20px 16px 100px" }}>
+    <div style={{ paddingBottom:"100px" }}>
+      <div style={{ padding:"20px 16px 0" }}>
       {historyView === "collections" && (
         <button onClick={() => setHistoryView("grid")} style={{ display:"flex", alignItems:"center", gap:"8px", width:"100%", padding:"12px 16px", marginBottom:"16px", borderRadius:"12px", border:`1px solid ${theme.border2}`, background:darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)", color:theme.text, fontSize:"14px", fontWeight:"600", cursor:"pointer" }}>
           <span style={{ fontSize:"18px" }}>←</span><span>Back to History</span>
@@ -841,9 +913,10 @@ export default function App() {
           </>
         )}
       </div>
+      </div>{/* end padding wrapper */}
 
       {historyView === "collections" ? (
-        <div>
+        <div style={{ padding:"0 16px" }}>
           <button onClick={() => { setEditingColl(null); setCollName(""); setCollEmoji("🗂"); setCollDesc(""); setShowCollModal(true); }} style={{ width:"100%", padding:"12px", borderRadius:"12px", border:`1px dashed ${theme.border2}`, background:"none", color:"#3498db", fontSize:"13px", fontWeight:"600", cursor:"pointer", marginBottom:"16px" }}>+ New Collection</button>
           {collections.length === 0 ? (
             <div style={{ textAlign:"center", padding:"40px 20px", color:theme.subtext }}><div style={{ fontSize:"40px", marginBottom:"12px" }}>🗂</div><div style={{ fontSize:"16px", fontWeight:"600", color:theme.text, marginBottom:"6px" }}>No collections yet</div></div>
@@ -873,11 +946,13 @@ export default function App() {
                       <div style={{ borderTop:`1px solid ${theme.border}`, padding:"12px" }}>
                         {collLogs.length === 0
                           ? <div style={{ textAlign:"center", padding:"20px", color:theme.subtext, fontSize:"12px" }}>No entries yet.</div>
-                          : <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
-                              {collLogs.map(log => (
-                                <MediaCard key={log.id} log={log} theme={theme} darkMode={darkMode} getVerdictStyle={gvs} searchTerm="" collection={collections.find(c => c.id === log.collection_id)} onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes} onEdit={() => startEdit(log)} onDelete={() => handleDelete(log.id)}/>
-                              ))}
-                            </div>
+                          : <EditorialFeed
+                              logs={collLogs}
+                              theme={theme} darkMode={darkMode} getVerdictStyle={gvs}
+                              searchTerm="" collections={collections}
+                              onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
+                              onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+                            />
                         }
                       </div>
                     )}
@@ -895,13 +970,13 @@ export default function App() {
             {logs.length === 0 && <button onClick={() => setActiveTab("log")} style={{ marginTop:"20px", padding:"12px 24px", borderRadius:"12px", border:"none", background:darkMode?"#fff":"#111", color:darkMode?"#000":"#fff", fontWeight:"600", cursor:"pointer" }}>Log something →</button>}
           </div>
         ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-            {filteredHistory.map((log, i) => (
-              <div key={log.id} ref={(savedEntryId==="latest"&&i===0)||savedEntryId===log.id ? savedEntryRef : null}>
-                <MediaCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={gvs} searchTerm={historySearch} collection={collections.find(c => c.id === log.collection_id)} onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes} onEdit={() => startEdit(log)} onDelete={() => handleDelete(log.id)}/>
-              </div>
-            ))}
-          </div>
+          <EditorialFeed
+            logs={filteredHistory}
+            theme={theme} darkMode={darkMode} getVerdictStyle={gvs}
+            searchTerm={historySearch} collections={collections}
+            onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
+            onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+          />
         )
       )}
     </div>
@@ -910,38 +985,61 @@ export default function App() {
   // ────────────────────────────────────────────
   // TAB: QUEUE
   // ────────────────────────────────────────────
-  const renderQueue = () => (
-    <div style={{ padding:"20px 16px 100px" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"20px" }}>
-        <div>
-          <h1 style={{ fontSize:"22px", fontWeight:"700", letterSpacing:"-0.5px", margin:0, color:theme.text }}>Queue</h1>
-          <p style={{ fontSize:"12px", color:theme.subtext, margin:"3px 0 0" }}>What you're into and what's next</p>
-        </div>
-      </div>
-      <div style={{ display:"flex", gap:"6px", marginBottom:"20px", overflowX:"auto", paddingBottom:"4px" }}>
-        {["All","Read","Watched","Listened","Experienced"].map(f => {
-          const def = CATEGORIES[f];
-          const active = queueFilter === f;
-          return <button key={f} onClick={() => setQueueFilter(f)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:"20px", border:`1px solid ${active?(def?.color||theme.border2):theme.border}`, background:active?(darkMode?`${def?.color||"#fff"}18`:`${def?.color||"#000"}10`):"none", color:active?(def?.color||theme.text):theme.subtext, fontSize:"11px", fontWeight:"600", cursor:"pointer" }}>{def?`${def.icon} ${f}`:"All"}</button>;
-        })}
-      </div>
-      {filteredQueue.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"60px 20px", color:theme.subtext }}>
-          <div style={{ fontSize:"40px", marginBottom:"12px" }}>⏳</div>
-          <div style={{ fontSize:"16px", fontWeight:"600", color:theme.text, marginBottom:"6px" }}>Your queue is empty</div>
-          <button onClick={() => setActiveTab("log")} style={{ marginTop:"10px", padding:"12px 24px", borderRadius:"12px", border:"none", background:darkMode?"#fff":"#111", color:darkMode?"#000":"#fff", fontWeight:"600", cursor:"pointer" }}>Add to queue →</button>
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-          {filteredQueue.map((log, i) => (
-            <div key={log.id} ref={(savedEntryId==="latest"&&i===0)||savedEntryId===log.id ? savedEntryRef : null}>
-              <QueueCard log={log} theme={theme} darkMode={darkMode} getVerdictStyle={gvs} onMapClick={handleMapClick} onEdit={() => startEdit(log)} onDelete={() => handleDelete(log.id)}/>
+  const renderQueue = () => {
+    const active   = filteredQueue.filter(l => l.verdict?.startsWith("Currently"));
+    const wishlist = filteredQueue.filter(l => l.verdict?.startsWith("Want to") || l.verdict === "Want to go");
+    const isEmpty  = filteredQueue.length === 0;
+
+    return (
+      <div style={{ paddingBottom:100 }}>
+        {/* Header */}
+        <div style={{ padding:"20px 16px 0" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+            <div>
+              <h1 style={{ fontFamily:"'Instrument Serif','Georgia',serif", fontSize:28, fontWeight:400, letterSpacing:"-0.3px", margin:0, color:darkMode?"#f5e8c8":theme.text, lineHeight:1.0 }}>
+                Queue <em style={{ color:darkMode?"rgba(255,180,60,0.5)":theme.subtext, fontStyle:"italic" }}>&amp; what's next</em>
+              </h1>
+              <p style={{ fontSize:12, color:theme.subtext, margin:"4px 0 0" }}>
+                {active.length} in progress · {wishlist.length} waiting
+              </p>
             </div>
-          ))}
+          </div>
+          {/* Category filter pills */}
+          <div style={{ display:"flex", gap:"6px", marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
+            {["All","Read","Watched","Listened","Experienced"].map(f => {
+              const def    = CATEGORIES[f];
+              const active = queueFilter === f;
+              return (
+                <button key={f} onClick={() => setQueueFilter(f)}
+                  style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, border:`1px solid ${active?(def?.color||theme.border2):theme.border}`, background:active?(darkMode?`${def?.color||"#fff"}18`:`${def?.color||"#000"}10`):"none", color:active?(def?.color||theme.text):theme.subtext, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                  {def ? `${def.icon} ${f}` : "All"}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </div>
-  );
+
+        {isEmpty ? (
+          <div style={{ textAlign:"center", padding:"60px 20px", color:theme.subtext }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🕯️</div>
+            <div style={{ fontFamily:"'Instrument Serif','Georgia',serif", fontSize:22, color:darkMode?"#f5e8c8":theme.text, marginBottom:6 }}>Your bedside table is empty</div>
+            <div style={{ fontSize:13, color:theme.subtext, marginBottom:20 }}>Add something you're reading, watching, or want to next</div>
+            <button onClick={() => setActiveTab("log")} style={{ padding:"12px 24px", borderRadius:12, border:"none", background:darkMode?"rgba(255,180,60,0.15)":"#111", color:darkMode?"#f1c40f":"#fff", fontWeight:700, cursor:"pointer", fontSize:14 }}>Log something →</button>
+          </div>
+        ) : (
+          <BedsideQueue
+            logs={filteredQueue}
+            theme={theme}
+            darkMode={darkMode}
+            onEdit={log => startEdit(log)}
+            onDelete={id => handleDelete(id)}
+            onNotesUpdate={handleUpdateNotes}
+            filter={queueFilter}
+          />
+        )}
+      </div>
+    );
+  };
 
   // ────────────────────────────────────────────
   // RENDER
