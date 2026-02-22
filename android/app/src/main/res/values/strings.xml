@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Did I Like It?</string>
+    <string name="title_activity_main">Did I Like It?</string>
+    <string name="package_name">com.didilikeitapp.app</string>
+    <string name="custom_url_scheme">com.didilikeitapp.app</string>
+</resources>

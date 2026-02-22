@@ -5,7 +5,6 @@ import { buildTheme, getVerdictStyle } from "./utils/theme.js";
 import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight } from "./utils/helpers.js";
 import { useLogs } from "./hooks/useLogs.js";
 import { useApiSearch } from "./hooks/useApiSearch.js";
-import { MicButton } from "./components/MicButton.jsx";
 import { EditorialFeed } from "./components/EditorialCard.jsx";
 import { TasteGenome, TasteRadar, TasteOracle } from "./components/TasteIntelligence.jsx";
 import { BedsideQueue } from "./components/BedsideQueue.jsx";
@@ -812,12 +811,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Notes + Mic */}
+        {/* Notes */}
         <div style={{ marginBottom:"8px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
-            <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase" }}>Thoughts (optional)</label>
-            <MicButton currentText={notes} onTextChange={setNotes} theme={theme} darkMode={darkMode}/>
-          </div>
+          <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Thoughts (optional)</label>
           <textarea ref={textareaRef} placeholder="How did it make you feel? What stuck with you?…"
             value={notes} onChange={e => setNotes(e.target.value)}
             style={{ ...inputStyle, height:"60px", overflow:"hidden", resize:"none", marginBottom:0 }}/>

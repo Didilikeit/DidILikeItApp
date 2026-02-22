@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { MicButton } from "./MicButton.jsx";
 import { VERDICT_MAP_COLOR, getSubtypeStyle } from "../utils/helpers.js";
 
 export const NotesModal = ({ log, theme, darkMode, onClose, onSave }) => {
@@ -70,13 +69,6 @@ export const NotesModal = ({ log, theme, darkMode, onClose, onSave }) => {
             <>
               <button onClick={() => setEditing(true)} style={{ flex:1, padding:"11px", borderRadius:"10px", border:`1px solid ${theme.border2}`, background:"none", color:theme.text, fontWeight:"600", fontSize:"13px", cursor:"pointer" }}>✏️ Edit</button>
               <button onClick={handleCopy} style={{ flex:1, padding:"11px", borderRadius:"10px", border:`1px solid ${theme.border2}`, background:"none", color:theme.text, fontWeight:"600", fontSize:"13px", cursor:"pointer" }}>📋 Copy</button>
-              <MicButton
-                currentText={editText}
-                onTextChange={t => { setEditText(t); setEditing(true); }}
-                theme={theme}
-                darkMode={darkMode}
-                size="small"
-              />
             </>
           )}
         </div>
