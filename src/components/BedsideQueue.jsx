@@ -131,20 +131,20 @@ const NotesSlide = ({ log, theme, darkMode, onClose, onExpand, onNotesUpdate }) 
         </div>
 
         {/* Body */}
-        <div style={{ flex:1, overflowY:"auto", padding:"14px 16px", WebkitOverflowScrolling:"touch" }}>
-          {editing ? (
-            <textarea
-              value={localNotes}
-              onChange={e => setLocalNotes(e.target.value)}
-              autoFocus
-              style={{ width:"100%", minHeight:"160px", background:"none", border:"1px solid rgba(255,180,60,0.14)", borderRadius:"10px", padding:"12px", fontFamily:serif, fontStyle:"italic", fontSize:"14px", color:"rgba(255,220,150,0.85)", lineHeight:1.85, resize:"vertical", outline:"none", boxSizing:"border-box" }}
-            />
-          ) : (
+        {editing ? (
+          <textarea
+            value={localNotes}
+            onChange={e => setLocalNotes(e.target.value)}
+            autoFocus
+            style={{ flex:1, width:"100%", background:"none", border:"none", borderTop:"1px solid rgba(255,180,60,0.08)", padding:"16px", fontFamily:serif, fontStyle:"italic", fontSize:"15px", color:"rgba(255,220,150,0.9)", lineHeight:1.9, resize:"none", outline:"none", boxSizing:"border-box" }}
+          />
+        ) : (
+          <div style={{ flex:1, overflowY:"auto", padding:"14px 16px", WebkitOverflowScrolling:"touch" }}>
             <div style={{ fontFamily:serif, fontStyle:"italic", fontSize:"14px", color:"rgba(255,220,150,0.6)", lineHeight:1.85, whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
               {log.notes || <span style={{ color:"rgba(255,180,60,0.15)", fontFamily:mono, fontSize:"8px", letterSpacing:"0.1em" }}>NO NOTES YET</span>}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ padding:"12px 16px 20px", borderTop:"1px solid rgba(255,180,60,0.07)", flexShrink:0 }}>
@@ -238,6 +238,17 @@ const QueueCard = ({ log, isExpanded, notesOpen, onCardTap, onNotesClose, onEdit
                 {vq.dot && <span style={{ width:5, height:5, borderRadius:"50%", background:vq.color, boxShadow:`0 0 6px ${vq.color}`, animation:"bedsidePulse 2s ease-in-out infinite" }}/>}
                 {vq.label}
               </div>
+              {log.logged_at && (
+                <div style={{ marginTop:5, fontSize:9, color:"rgba(255,180,60,0.25)", fontFamily:mono, letterSpacing:"0.06em" }}>
+                  {(() => {
+                    const d = new Date(log.logged_at);
+                    const ds = d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
+                    const cat = getSubtypeStyle(log.media_type)?.cat || "";
+                    const verb = cat==="Read"?"Reading since":cat==="Watched"?"Watching since":cat==="Listened"?"Listening since":cat==="Experienced"?"Going":"Added";
+                    return `${verb} ${ds}`;
+                  })()}
+                </div>
+              )}
               <style>{`@keyframes bedsidePulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
 
               {/* Location (wishlist items) */}
@@ -326,15 +337,21 @@ export const BedsideQueue = ({ logs, theme, darkMode, onEdit, onDelete, onNotesU
     if (!allItems.find(l => l.id === expandedId)) { setExpandedId(allItems[0].id); setNotesOpen(false); }
   }, [logs]);
 
-  // Tap a collapsed card → expand it (close notes on previous).
-  // Tap the already-expanded card → open notes (if notes exist). Never collapses on tap.
+  // Tap a collapsed card → expand it.
+  // Tap the already-expanded card → open notes if they exist, otherwise collapse.
+  // Tapping expanded with notes open → close notes (collapse).
   const handleTap = (id) => {
     if (id !== expandedId) {
       setExpandedId(id);
       setNotesOpen(false);
     } else {
-      const log = allItems.find(l => l.id === id);
-      if (log?.notes) setNotesOpen(true);
+      if (notesOpen) {
+        setNotesOpen(false);
+      } else {
+        const log = allItems.find(l => l.id === id);
+        if (log?.notes) setNotesOpen(true);
+        else setExpandedId(null); // no notes → collapse
+      }
     }
   };
 

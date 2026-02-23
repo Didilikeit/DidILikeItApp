@@ -108,13 +108,15 @@ const computeTaste = (logs, yearFilter) => {
 };
 
 // Render bold markdown-style **text**
-const RichText = ({ text, color="#fff", size=13, style={} }) => {
+const RichText = ({ text, color, size=13, style={}, darkMode=true }) => {
   const parts = text.split(/\*\*(.+?)\*\*/g);
+  const baseColor = darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.6)";
+  const emphColor = color || (darkMode ? "#fff" : "#111");
   return (
-    <span style={{ fontSize:size, lineHeight:1.65, color:`rgba(255,255,255,0.55)`, ...style }}>
+    <span style={{ fontSize:size, lineHeight:1.65, color:baseColor, ...style }}>
       {parts.map((p,i) =>
         i % 2 === 1
-          ? <strong key={i} style={{ color, fontWeight:700, fontStyle:"normal" }}>{p}</strong>
+          ? <strong key={i} style={{ color:emphColor, fontWeight:700, fontStyle:"normal" }}>{p}</strong>
           : p
       )}
     </span>
@@ -403,7 +405,7 @@ const Oracle = ({ oracle, total, hitRate, lovedCount, topCreatorEntry, theme, da
               cursor:"pointer",
               transition:"all 0.2s ease",
             }}>
-            <RichText text={text} color={theme.text} size={12}/>
+            <RichText text={text} color={theme.text} size={12} darkMode={darkMode}/>
           </div>
         ))}
       </div>

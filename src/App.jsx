@@ -6,12 +6,15 @@ import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filte
 import { useLogs } from "./hooks/useLogs.js";
 import { useApiSearch } from "./hooks/useApiSearch.js";
 import { EditorialFeed } from "./components/EditorialCard.jsx";
+import { GridFeed, ViewToggle } from "./components/GridFeed.jsx";
 import { TasteGenome, TasteRadar, TasteOracle } from "./components/TasteIntelligence.jsx";
 import { BedsideQueue } from "./components/BedsideQueue.jsx";
 import { QueueCard } from "./components/QueueCard.jsx";
 import { ActivityCalendar } from "./components/ActivityCalendar.jsx";
 import { GenreDNA } from "./components/GenreDNA.jsx";
 import { MapTab } from "./components/MapTab.jsx";
+import { QuickLog } from "./components/QuickLog.jsx";
+import { ThreadsTab } from "./components/ThreadsTab.jsx";
 
 export default function App() {
   // ── Auth ──
@@ -22,7 +25,9 @@ export default function App() {
   const [authMsg, setAuthMsg] = useState("");
 
   // ── Data ──
-  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes } = useLogs();
+  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink } = useLogs();
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [lastQuickLogEntry, setLastQuickLogEntry] = useState(null);
   const [collections, setCollections] = useState(() => {
     try { return JSON.parse(localStorage.getItem("dili_collections") || "[]"); } catch { return []; }
   });
@@ -34,6 +39,8 @@ export default function App() {
     return s !== null ? s === "true" : true;
   });
   const [historyView, setHistoryView] = useState("grid");
+  const [historyDisplay, setHistoryDisplay] = useState("editorial"); // "editorial" | "compact"
+  const [queueDisplay, setQueueDisplay] = useState("editorial");     // "editorial" | "compact"
   const [mapHighlightId, setMapHighlightId] = useState(null);
 
   // ── Global search ──
@@ -62,6 +69,7 @@ export default function App() {
   const [locationLat, setLocationLat] = useState(null);
   const [locationLng, setLocationLng] = useState(null);
   const [collectionId, setCollectionId] = useState("");
+  const [inspiredBy, setInspiredBy] = useState(""); // id of the entry that led to this one
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef(null);
@@ -82,6 +90,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState("Date");
   const [filterMonth, setFilterMonth] = useState("All");
   const [showCollEntries, setShowCollEntries] = useState(false);
+  const [hiddenCollIds, setHiddenCollIds] = useState(new Set()); // ids of collections to hide
 
   // ── Queue filter ──
   const [queueFilter, setQueueFilter] = useState("All");
@@ -104,6 +113,9 @@ export default function App() {
   const [collEmoji, setCollEmoji] = useState("🗂");
   const [collDesc, setCollDesc] = useState("");
   const [openCollId, setOpenCollId] = useState(null);
+  const [collDisplayMap, setCollDisplayMap] = useState({}); // collId → "editorial"|"compact"
+  const getCollDisplay = id => collDisplayMap[id] || "editorial";
+  const setCollDisplay = (id, v) => setCollDisplayMap(prev => ({ ...prev, [id]: v }));
 
   // ── Settings / About ──
   const [showAbout, setShowAbout] = useState(false);
@@ -112,6 +124,55 @@ export default function App() {
   // ── Theme ──
   const theme = useMemo(() => buildTheme(darkMode), [darkMode]);
   const gvs = useCallback(v => getVerdictStyle(v, darkMode), [darkMode]);
+
+  // ── Pull to Refresh ──
+  const scrollRef = useRef(null);
+  const [pulling, setPulling]     = useState(false);
+  const [pullDist, setPullDist]   = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const PULL_THRESHOLD = 72;
+
+  const handleTouchStart = e => {
+    if (scrollRef.current?.scrollTop === 0) touchStartY.current = e.touches[0].clientY;
+    else touchStartY.current = 0;
+  };
+  const handleTouchMove = e => {
+    if (!touchStartY.current || refreshing) return;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (dy > 0 && scrollRef.current?.scrollTop === 0) {
+      setPulling(true);
+      setPullDist(Math.min(dy * 0.45, PULL_THRESHOLD + 20));
+    }
+  };
+  const handleTouchEnd = async () => {
+    if (pulling && pullDist >= PULL_THRESHOLD) {
+      setRefreshing(true);
+      setPullDist(PULL_THRESHOLD);
+      try {
+        await fetchLogs(user);
+        // Reset all filters and searches back to defaults
+        setHistorySearch("");
+        setFilterCat("All");
+        setVerdictFilter("");
+        setSortBy("Date");
+        setFilterMonth("All");
+        setShowCollEntries(false);
+        setHiddenCollIds(new Set());
+        setQueueFilter("All");
+        setGlobalSearch("");
+        setGlobalSearchOpen(false);
+        setHistoryView("grid");
+        setHistoryDisplay("editorial");
+        setQueueDisplay("editorial");
+      } finally {
+        setTimeout(() => { setRefreshing(false); setPulling(false); setPullDist(0); }, 400);
+      }
+    } else {
+      setPulling(false); setPullDist(0);
+    }
+    touchStartY.current = 0;
+  };
 
   // Persist settings
   useEffect(() => { document.body.style.backgroundColor = theme.bg; }, [theme.bg]);
@@ -225,8 +286,12 @@ export default function App() {
 
   const filteredHistory = useMemo(() => {
     const base = filterLogs(logs, historySearch, filterCat, verdictFilter, filterMonth, sortBy, "history");
-    return showCollEntries ? base : base.filter(l => !l.collection_id);
-  }, [logs, historySearch, filterCat, verdictFilter, filterMonth, sortBy, showCollEntries]);
+    return base.filter(l => {
+      if (!showCollEntries && l.collection_id) return false;
+      if (l.collection_id && hiddenCollIds.has(l.collection_id)) return false;
+      return true;
+    });
+  }, [logs, historySearch, filterCat, verdictFilter, filterMonth, sortBy, showCollEntries, hiddenCollIds]);
 
   const filteredQueue = useMemo(() =>
     filterLogs(logs, "", queueFilter, "", "All", "Date", "queue"),
@@ -298,6 +363,22 @@ export default function App() {
     try {
       await saveLog({ logData, editingId, user, verdict });
       const sid = editingId;
+      // Handle inspired-by link
+      if (!editingId) {
+        // New entry: create link if inspired by something
+        if (inspiredBy) {
+          const sourceId = inspiredBy;
+          setTimeout(() => {
+            const newEntry = logs[0];
+            if (newEntry && sourceId) addLink(sourceId, newEntry.id);
+          }, 300);
+        }
+      } else {
+        // Editing: remove old incoming link and add new one if changed
+        const oldLink = links.find(lk => lk.b === editingId);
+        if (oldLink) removeLink(oldLink.a, editingId);
+        if (inspiredBy) addLink(inspiredBy, editingId);
+      }
       resetForm();
       const isQ = verdict === "Want to go" || verdict?.startsWith("Want to") || verdict?.startsWith("Currently");
       setActiveTab(isQ ? "queue" : "history");
@@ -310,7 +391,7 @@ export default function App() {
     setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict("");
     setManualDate(""); setCurrentPage(""); setTotalPages(""); setCurrentEpisode(""); setTotalEpisodes(""); setCurrentSeason(""); setArtwork(""); setGenre("");
     setLocationVenue(""); setLocationCity(""); setLocationLat(null); setLocationLng(null);
-    setCollectionId(""); setEditingId(null);
+    setCollectionId(""); setInspiredBy(""); setEditingId(null);
     setSearchResults([]); setSearchQuery(""); setGeoResults([]); setGeoQuery("");
   };
 
@@ -343,11 +424,30 @@ export default function App() {
     setLocationVenue(log.location_venue || "");
     setLocationCity(log.location_city || ""); setLocationLat(log.lat || null);
     setLocationLng(log.lng || null); setCollectionId(log.collection_id || "");
+    // Pre-fill inspired-by from existing links (find what this entry was inspired by)
+    const existingLink = links.find(lk => lk.b === log.id);
+    setInspiredBy(existingLink ? existingLink.a : "");
     setActiveTab("log");
   };
 
   const handleUpdateNotes = useCallback((id, text) => updateNotes(id, text, user), [updateNotes, user]);
-  const handleMapClick = log => { setMapHighlightId(log.id); setActiveTab("map"); };
+  const handleMapClick = log => { setMapHighlightId(log.id); setActiveTab("threads"); };
+
+  const handleQuickSave = async (logData) => {
+    const entry = {
+      ...logData,
+      logged_at: new Date().toISOString(),
+      notes: null, genre: logData.genre || null,
+      current_page: null, total_pages: null,
+      current_episode: null, total_episodes: null, current_season: null,
+      location_venue: null, location_city: null, lat: null, lng: null,
+      collection_id: null,
+      year_released: logData.year_released || null,
+    };
+    await saveLog({ logData: entry, editingId: null, user, verdict: logData.verdict });
+    // Find the newly created entry so "Add more detail" can jump to it
+    setLastQuickLogEntry({ ...entry, id: "latest" });
+  };
 
   // Collection actions
   const saveCollection = () => {
@@ -480,9 +580,14 @@ export default function App() {
             <div style={{ fontSize:"13px", color:theme.subtext2, lineHeight:"1.5", flex:1 }}>{insight}</div>
           </div>
 
-          <button onClick={() => setActiveTab("log")} style={{ width:"100%", padding:"15px", borderRadius:"14px", border:"none", background:"linear-gradient(135deg,#3498db,#9b59b6)", color:"#fff", fontWeight:"700", fontSize:"15px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", letterSpacing:"-0.2px", boxShadow:"0 4px 20px rgba(52,152,219,0.3)" }}>
-            <span style={{ fontSize:"20px" }}>＋</span> Log something
-          </button>
+          <div style={{ display:"flex", gap:"8px" }}>
+            <button onClick={() => setShowQuickLog(true)} style={{ flex:1, padding:"15px 10px", borderRadius:"14px", border:"none", background:"linear-gradient(135deg,#f1c40f,#e67e22)", color:"#000", fontWeight:"700", fontSize:"14px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", letterSpacing:"-0.2px", boxShadow:"0 4px 20px rgba(241,196,15,0.25)" }}>
+              <span style={{ fontSize:"18px" }}>⚡</span> Quick log
+            </button>
+            <button onClick={() => setActiveTab("log")} style={{ flex:1, padding:"15px 10px", borderRadius:"14px", border:"none", background:"linear-gradient(135deg,#3498db,#9b59b6)", color:"#fff", fontWeight:"700", fontSize:"14px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", letterSpacing:"-0.2px", boxShadow:"0 4px 20px rgba(52,152,219,0.3)" }}>
+              <span style={{ fontSize:"18px" }}>＋</span> Full log
+            </button>
+          </div>
         </div>
 
         {/* ── RECENTLY LOGGED ── */}
@@ -811,6 +916,41 @@ export default function App() {
           </div>
         )}
 
+        {/* ── INSPIRED BY ── */}
+        {(() => {
+          const finishedLogs = logs.filter(l => ["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict));
+          if (finishedLogs.length === 0) return null;
+          const picked = inspiredBy ? logs.find(l => l.id === inspiredBy) : null;
+          return (
+            <div style={{ marginBottom:"12px" }}>
+              <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>
+                🧠 Inspired by… <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:theme.subtext }}>(links this in the mind map)</span>
+              </label>
+              {picked ? (
+                <div style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 12px", borderRadius:"10px", border:`1px solid rgba(52,152,219,0.4)`, background:`rgba(52,152,219,0.08)` }}>
+                  {picked.artwork && <img src={picked.artwork} alt="" style={{ width:28, height:38, borderRadius:4, objectFit:"cover", flexShrink:0 }} onError={e => e.target.style.display="none"}/>}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:"700", fontSize:"13px", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{picked.title}</div>
+                    <div style={{ fontSize:"10px", color:theme.subtext }}>{picked.media_type}{picked.creator ? ` · ${picked.creator}` : ""}</div>
+                  </div>
+                  <button onClick={() => setInspiredBy("")} style={{ background:"none", border:"none", color:theme.subtext, fontSize:"16px", cursor:"pointer", padding:"2px 4px", flexShrink:0 }}>✕</button>
+                </div>
+              ) : (
+                <select
+                  value={inspiredBy}
+                  onChange={e => setInspiredBy(e.target.value)}
+                  style={{ ...inputStyle, marginBottom:0, color: inspiredBy ? theme.text : theme.subtext }}
+                >
+                  <option value="">Not inspired by anything specific</option>
+                  {finishedLogs.slice(0, 60).map(l => (
+                    <option key={l.id} value={l.id}>{l.title}{l.creator ? ` — ${l.creator}` : ""}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Notes */}
         <div style={{ marginBottom:"8px" }}>
           <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Thoughts (optional)</label>
@@ -868,6 +1008,7 @@ export default function App() {
           <h1 style={{ fontSize:"22px", fontWeight:"700", letterSpacing:"-0.5px", margin:0, color:theme.text }}>{historyView === "collections" ? "Collections" : "History"}</h1>
           <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
             {historyView === "grid" && <span style={{ fontSize:"12px", color:theme.subtext }}>{filteredHistory.length}</span>}
+            {historyView === "grid" && <ViewToggle view={historyDisplay} onChange={setHistoryDisplay} theme={theme}/>}
             {historyView === "grid" && <button onClick={() => setHistoryView("collections")} style={{ padding:"5px 10px", borderRadius:"20px", border:`1px solid ${theme.border}`, background:"none", color:theme.subtext, fontSize:"11px", fontWeight:"600", cursor:"pointer" }}>🗂 Collections</button>}
           </div>
         </div>
@@ -895,10 +1036,29 @@ export default function App() {
                 {dateOptions.map(m => <option key={m} value={m}>{m === "All" ? "All months" : m}</option>)}
               </select>
             </div>
-            {collEntriesCount > 0 && (
-              <button onClick={() => setShowCollEntries(v => !v)} style={{ display:"flex", alignItems:"center", gap:"5px", fontSize:"11px", fontWeight:"600", color:theme.subtext2, background:"none", border:`1px solid ${theme.border}`, borderRadius:"20px", padding:"4px 10px", cursor:"pointer", marginBottom:"8px" }}>
-                <span>{showCollEntries?"👁":"👁‍🗨"}</span><span>{showCollEntries?"Showing":"Hiding"} {collEntriesCount} collection entries</span>
-              </button>
+            {collections.length > 0 && (
+              <div style={{ marginBottom:"8px" }}>
+                <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", alignItems:"center" }}>
+                  <button onClick={() => setShowCollEntries(v => !v)}
+                    style={{ flexShrink:0, display:"flex", alignItems:"center", gap:"4px", fontSize:"10px", fontWeight:"700", color: showCollEntries ? theme.text : theme.subtext, background:"none", border:`1px solid ${showCollEntries ? theme.border2 : theme.border}`, borderRadius:"20px", padding:"4px 10px", cursor:"pointer" }}>
+                    {showCollEntries ? "👁" : "👁‍🗨"} Collections
+                  </button>
+                  {showCollEntries && collections.map(c => {
+                    const hidden = hiddenCollIds.has(c.id);
+                    return (
+                      <button key={c.id}
+                        onClick={() => setHiddenCollIds(prev => {
+                          const next = new Set(prev);
+                          if (hidden) next.delete(c.id); else next.add(c.id);
+                          return next;
+                        })}
+                        style={{ flexShrink:0, fontSize:"10px", fontWeight:"600", padding:"4px 10px", borderRadius:"20px", border:`1px solid ${hidden ? theme.border : (c.color || "#3498db") + "55"}`, background: hidden ? "none" : `${c.color || "#3498db"}11`, color: hidden ? theme.subtext : (c.color || theme.text), cursor:"pointer", opacity: hidden ? 0.45 : 1, textDecoration: hidden ? "line-through" : "none" }}>
+                        {c.emoji} {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
             {verdictFilter && (
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
@@ -939,16 +1099,33 @@ export default function App() {
                       </div>
                     </div>
                     {isOpen && (
-                      <div style={{ borderTop:`1px solid ${theme.border}`, padding:"12px" }}>
+                      <div style={{ borderTop:`1px solid ${theme.border}` }}>
                         {collLogs.length === 0
                           ? <div style={{ textAlign:"center", padding:"20px", color:theme.subtext, fontSize:"12px" }}>No entries yet.</div>
-                          : <EditorialFeed
-                              logs={collLogs}
-                              theme={theme} darkMode={darkMode} getVerdictStyle={gvs}
-                              searchTerm="" collections={collections}
-                              onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
-                              onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
-                            />
+                          : <>
+                              <div style={{ padding:"8px 12px 0", display:"flex", justifyContent:"flex-end" }}>
+                                <ViewToggle view={getCollDisplay(coll.id)} onChange={v => setCollDisplay(coll.id, v)} theme={theme}/>
+                              </div>
+                              {getCollDisplay(coll.id) === "compact"
+                                ? <GridFeed
+                                    logs={collLogs}
+                                    darkMode={darkMode}
+                                    onEdit={log => startEdit(log)}
+                                    onDelete={id => handleDelete(id)}
+                                    onNotesUpdate={handleUpdateNotes}
+                                    searchTerm=""
+                                  />
+                                : <div style={{ padding:"12px" }}>
+                                    <EditorialFeed
+                                      logs={collLogs}
+                                      theme={theme} darkMode={darkMode} getVerdictStyle={gvs}
+                                      searchTerm="" collections={collections}
+                                      onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
+                                      onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+                                    />
+                                  </div>
+                              }
+                            </>
                         }
                       </div>
                     )}
@@ -965,6 +1142,15 @@ export default function App() {
             <div style={{ fontSize:"16px", fontWeight:"600", color:theme.text, marginBottom:"6px" }}>{historySearch ? "No results found" : logs.length === 0 ? "Nothing logged yet" : "No matches"}</div>
             {logs.length === 0 && <button onClick={() => setActiveTab("log")} style={{ marginTop:"20px", padding:"12px 24px", borderRadius:"12px", border:"none", background:darkMode?"#fff":"#111", color:darkMode?"#000":"#fff", fontWeight:"600", cursor:"pointer" }}>Log something →</button>}
           </div>
+        ) : historyDisplay === "compact" ? (
+          <GridFeed
+            logs={filteredHistory}
+            darkMode={darkMode}
+            onEdit={log => startEdit(log)}
+            onDelete={id => handleDelete(id)}
+            onNotesUpdate={handleUpdateNotes}
+            searchTerm={historySearch}
+          />
         ) : (
           <EditorialFeed
             logs={filteredHistory}
@@ -999,6 +1185,7 @@ export default function App() {
                 {active.length} in progress · {wishlist.length} waiting
               </p>
             </div>
+            <ViewToggle view={queueDisplay} onChange={setQueueDisplay} theme={theme}/>
           </div>
           {/* Category filter pills */}
           <div style={{ display:"flex", gap:"6px", marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
@@ -1022,6 +1209,14 @@ export default function App() {
             <div style={{ fontSize:13, color:theme.subtext, marginBottom:20 }}>Add something you're reading, watching, or want to next</div>
             <button onClick={() => setActiveTab("log")} style={{ padding:"12px 24px", borderRadius:12, border:"none", background:darkMode?"rgba(255,180,60,0.15)":"#111", color:darkMode?"#f1c40f":"#fff", fontWeight:700, cursor:"pointer", fontSize:14 }}>Log something →</button>
           </div>
+        ) : queueDisplay === "compact" ? (
+          <GridFeed
+            logs={filteredQueue}
+            darkMode={darkMode}
+            onEdit={log => startEdit(log)}
+            onDelete={id => handleDelete(id)}
+            onNotesUpdate={handleUpdateNotes}
+          />
         ) : (
           <BedsideQueue
             logs={filteredQueue}
@@ -1046,10 +1241,10 @@ export default function App() {
 
   const tabs = [
     { id:"home",    icon:"🏠", label:"Home" },
-    { id:"log",     icon:"＋", label:"Log" },
+    { id:"log",     icon:"✚", label:"Log" },
     { id:"history", icon:"📚", label:"History" },
     { id:"queue",   icon:"⏳", label:"Queue" },
-    { id:"map",     icon:"🗺", label:"Map" },
+    { id:"threads", icon:"🗺", label:"Maps" },
   ];
 
   return (
@@ -1107,23 +1302,55 @@ export default function App() {
       </div>
 
       {/* ── TAB CONTENT ── */}
-      <div style={{ overflowY:"auto", height:"calc(100vh - 56px - env(safe-area-inset-top, 0px))" }}>
+      <div
+        ref={scrollRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ overflowY:"auto", height:"calc(100vh - 56px - env(safe-area-inset-top, 0px))", position:"relative" }}
+      >
+        {/* Pull-to-refresh indicator */}
+        {(pulling || refreshing) && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:`${pullDist}px`, overflow:"hidden", transition: refreshing ? "none" : "height 0.15s ease", pointerEvents:"none" }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"6px", opacity: Math.min(pullDist / PULL_THRESHOLD, 1) }}>
+              <div style={{
+                width:"24px", height:"24px", borderRadius:"50%",
+                border:`2px solid ${theme.border2}`,
+                borderTopColor: "#3498db",
+                animation: refreshing ? "ptr-spin 0.7s linear infinite" : "none",
+                transform: refreshing ? undefined : `rotate(${Math.min(pullDist / PULL_THRESHOLD, 1) * 270}deg)`,
+                transition: "transform 0.1s ease",
+              }}/>
+              <style>{`@keyframes ptr-spin{to{transform:rotate(360deg)}}`}</style>
+              <span style={{ fontSize:"9px", color:theme.subtext, fontWeight:"600", letterSpacing:"0.08em" }}>
+                {refreshing ? "Resetting…" : pullDist >= PULL_THRESHOLD ? "Release to reset" : "Pull to reset filters"}
+              </span>
+            </div>
+          </div>
+        )}
         {activeTab === "home"    && renderHome()}
         {activeTab === "log"     && renderLog()}
         {activeTab === "history" && renderHistory()}
         {activeTab === "queue"   && renderQueue()}
-        {activeTab === "map"     && <MapTab logs={logs} theme={theme} darkMode={darkMode} getVerdictStyle={gvs} highlightId={mapHighlightId}/>}
+        {activeTab === "threads" && <ThreadsTab logs={logs} links={links} theme={theme} darkMode={darkMode} onAddLink={addLink} onRemoveLink={removeLink} onEdit={log => startEdit(log)} mapHighlightId={mapHighlightId} getVerdictStyle={gvs} collections={collections} hiddenCollIds={hiddenCollIds}/>}
       </div>
 
       {/* ── TAB BAR ── */}
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"500px", background:theme.tabBar, borderTop:`1px solid ${theme.border}`, display:"flex", zIndex:100, paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
         {tabs.map(tab => {
           const active = activeTab === tab.id;
+          const isLog = tab.id === "log";
           return (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (tab.id !== "map") setMapHighlightId(null); }}
+            <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (tab.id !== "threads") setMapHighlightId(null); }}
               style={{ flex:1, padding:"8px 0 6px", background:"none", border:"none", display:"flex", flexDirection:"column", alignItems:"center", gap:"2px", cursor:"pointer", position:"relative" }}>
-              {active && <div style={{ position:"absolute", top:0, left:"25%", right:"25%", height:"2px", background:"#3498db", borderRadius:"0 0 2px 2px" }}/>}
-              <span style={{ fontSize:"16px", lineHeight:1, filter: active ? "none" : "grayscale(1) opacity(0.4)" }}>{tab.icon}</span>
+              {active && !isLog && <div style={{ position:"absolute", top:0, left:"25%", right:"25%", height:"2px", background:"#3498db", borderRadius:"0 0 2px 2px" }}/>}
+              {isLog ? (
+                <div style={{ width:"28px", height:"28px", borderRadius:"50%", background: active ? "#3498db" : darkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:"1px" }}>
+                  <span style={{ fontSize:"16px", lineHeight:1, color: active ? "#fff" : darkMode ? "#fff" : "#333", fontWeight:"300" }}>+</span>
+                </div>
+              ) : (
+                <span style={{ fontSize:"16px", lineHeight:1, filter: active ? "none" : "grayscale(1) opacity(0.4)" }}>{tab.icon}</span>
+              )}
               <span style={{ fontSize:"9px", fontWeight: active ? "700" : "500", color: active ? "#3498db" : theme.subtext, letterSpacing:"0.02em" }}>{tab.label}</span>
             </button>
           );
@@ -1206,6 +1433,24 @@ export default function App() {
             <button onClick={() => setShowAbout(false)} style={{ marginTop:"20px", width:"100%", padding:"12px", borderRadius:"12px", border:`1px solid ${theme.border2}`, background:"none", color:theme.text, fontSize:"14px", fontWeight:"600", cursor:"pointer" }}>Close</button>
           </div>
         </div>
+      )}
+
+      {/* ── QUICK LOG ── */}
+      {showQuickLog && (
+        <QuickLog
+          theme={theme}
+          darkMode={darkMode}
+          onSave={handleQuickSave}
+          onClose={() => { setShowQuickLog(false); setLastQuickLogEntry(null); }}
+          onExpandFull={() => {
+            setShowQuickLog(false);
+            // Pre-fill the full log form with the quick-logged entry's data
+            const latest = logs[0];
+            if (latest) startEdit(latest);
+            else setActiveTab("log");
+            setLastQuickLogEntry(null);
+          }}
+        />
       )}
 
       {/* ── UNDO TOAST ── */}

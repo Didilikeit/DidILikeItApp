@@ -1,8 +1,14 @@
 import { useState, useCallback } from "react";
 import { supabase } from "../utils/supabase.js";
 
+// Thread links stored locally as { a: id, b: id } pairs
+const LINKS_KEY = "dili_threads";
+const loadLinks = () => { try { return JSON.parse(localStorage.getItem(LINKS_KEY) || "[]"); } catch { return []; } };
+const saveLinks = links => localStorage.setItem(LINKS_KEY, JSON.stringify(links));
+
 export const useLogs = () => {
   const [logs, setLogs] = useState([]);
+  const [links, setLinks] = useState(() => loadLinks());
 
   const fetchLogs = useCallback(async user => {
     if (!user) {
@@ -62,6 +68,11 @@ export const useLogs = () => {
       localStorage.setItem("guest_logs", JSON.stringify(cur.filter(l => l.id !== id)));
     }
     setLogs(prev => prev.filter(l => l.id !== id));
+    setLinks(prev => {
+      const next = prev.filter(lk => lk.a !== id && lk.b !== id);
+      saveLinks(next);
+      return next;
+    });
   }, []);
 
   const updateNotes = useCallback(async (id, newNotes, user) => {
@@ -74,5 +85,24 @@ export const useLogs = () => {
     }
   }, []);
 
-  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes };
+  // ── THREAD LINKS ─────────────────────────────────────────────────────────
+  const addLink = useCallback((aId, bId) => {
+    setLinks(prev => {
+      const exists = prev.some(lk => (lk.a === aId && lk.b === bId) || (lk.a === bId && lk.b === aId));
+      if (exists) return prev;
+      const next = [...prev, { a: aId, b: bId, createdAt: new Date().toISOString() }];
+      saveLinks(next);
+      return next;
+    });
+  }, []);
+
+  const removeLink = useCallback((aId, bId) => {
+    setLinks(prev => {
+      const next = prev.filter(lk => !((lk.a === aId && lk.b === bId) || (lk.a === bId && lk.b === aId)));
+      saveLinks(next);
+      return next;
+    });
+  }, []);
+
+  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink };
 };

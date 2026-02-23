@@ -2,17 +2,23 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { CATEGORIES, SUBTYPE_ICONS } from "../utils/constants.js";
 import { getCat, VERDICT_MAP_COLOR, getSubtypeStyle } from "../utils/helpers.js";
 
-export const MapTab = ({ logs, theme, darkMode, getVerdictStyle, highlightId }) => {
+export const MapTab = ({ logs, theme, darkMode, getVerdictStyle, highlightId, collections = [], hiddenCollIds = new Set() }) => {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef([]);
   const [mapFilter, setMapFilter] = useState("All");
   const [mapReady, setMapReady] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [localHiddenCollIds, setLocalHiddenCollIds] = useState(hiddenCollIds);
 
   const expLogs = useMemo(() =>
-    logs.filter(l => getCat(l.media_type) === "Experienced" && l.lat && l.lng && (mapFilter === "All" || l.media_type === mapFilter)),
-    [logs, mapFilter]
+    logs.filter(l => {
+      if (getCat(l.media_type) !== "Experienced" || !l.lat || !l.lng) return false;
+      if (mapFilter !== "All" && l.media_type !== mapFilter) return false;
+      if (l.collection_id && localHiddenCollIds.has(l.collection_id)) return false;
+      return true;
+    }),
+    [logs, mapFilter, localHiddenCollIds]
   );
 
   // Load Leaflet CSS + JS from CDN
@@ -113,6 +119,27 @@ export const MapTab = ({ logs, theme, darkMode, getVerdictStyle, highlightId }) 
           );
         })}
       </div>
+
+      {/* Collection toggles */}
+      {collections.length > 0 && (
+        <div style={{ padding:"6px 14px", background:theme.bg, borderBottom:`1px solid ${theme.border}`, display:"flex", gap:"5px", overflowX:"auto", flexShrink:0, alignItems:"center" }}>
+          <span style={{ fontSize:"9px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.1em", textTransform:"uppercase", flexShrink:0 }}>Collections:</span>
+          {collections.map(c => {
+            const hidden = localHiddenCollIds.has(c.id);
+            return (
+              <button key={c.id}
+                onClick={() => setLocalHiddenCollIds(prev => {
+                  const next = new Set(prev);
+                  if (hidden) next.delete(c.id); else next.add(c.id);
+                  return next;
+                })}
+                style={{ flexShrink:0, fontSize:"9px", fontWeight:"600", padding:"3px 8px", borderRadius:"20px", border:`1px solid ${hidden ? theme.border : "#3498db55"}`, background: hidden ? "none" : "#3498db11", color: hidden ? theme.subtext : "#3498db", cursor:"pointer", opacity: hidden ? 0.4 : 1, textDecoration: hidden ? "line-through" : "none" }}>
+                {c.emoji} {c.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div style={{ flex:1, position:"relative" }}>
         {!mapReady && (
