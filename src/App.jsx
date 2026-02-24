@@ -15,6 +15,7 @@ import { GenreDNA } from "./components/GenreDNA.jsx";
 import { MapTab } from "./components/MapTab.jsx";
 import { QuickLog } from "./components/QuickLog.jsx";
 import { ThreadsTab } from "./components/ThreadsTab.jsx";
+import { JournalTab } from "./components/JournalTab.jsx";
 
 export default function App() {
   // ── Auth ──
@@ -39,8 +40,8 @@ export default function App() {
     return s !== null ? s === "true" : true;
   });
   const [historyView, setHistoryView] = useState("grid");
-  const [historyDisplay, setHistoryDisplay] = useState("editorial"); // "editorial" | "compact"
-  const [queueDisplay, setQueueDisplay] = useState("editorial");     // "editorial" | "compact"
+  const [historyDisplay, setHistoryDisplay] = useState("compact"); // "editorial" | "compact"
+  const [queueDisplay, setQueueDisplay] = useState("compact");     // "editorial" | "compact"
   const [mapHighlightId, setMapHighlightId] = useState(null);
 
   // ── Global search ──
@@ -105,6 +106,8 @@ export default function App() {
   const undoTimerRef = useRef(null);
   const [savedEntryId, setSavedEntryId] = useState(null);
   const savedEntryRef = useRef(null);
+  const [preEditTab, setPreEditTab] = useState(null);   // tab to return to on cancel
+  const [preEditLogId, setPreEditLogId] = useState(null); // entry to re-open on cancel
 
   // ── Collection modal ──
   const [showCollModal, setShowCollModal] = useState(false);
@@ -163,8 +166,8 @@ export default function App() {
         setGlobalSearch("");
         setGlobalSearchOpen(false);
         setHistoryView("grid");
-        setHistoryDisplay("editorial");
-        setQueueDisplay("editorial");
+        setHistoryDisplay("compact");
+        setQueueDisplay("compact");
       } finally {
         setTimeout(() => { setRefreshing(false); setPulling(false); setPullDist(0); }, 400);
       }
@@ -247,11 +250,30 @@ export default function App() {
   const globalResults = useMemo(() => {
     const q = globalSearch.trim().toLowerCase();
     if (!q || q.length < 2) return [];
+
+    const getNotesSnippet = (notes, term) => {
+      if (!notes) return null;
+      const nl = notes.toLowerCase();
+      const idx = nl.indexOf(term);
+      if (idx === -1) return null;
+      const words = notes.split(/\s+/);
+      const upToIdx = notes.slice(0, idx).trim();
+      const wb = upToIdx === "" ? 0 : upToIdx.split(/\s+/).length;
+      const s = Math.max(0, wb - 5);
+      const e = Math.min(words.length, wb + 12);
+      return (s > 0 ? "…" : "") + words.slice(s, e).join(" ") + (e < words.length ? "…" : "");
+    };
+
     return logs.filter(log => {
       const coll = collections.find(c => c.id === log.collection_id);
       const src = [log.title, log.creator, log.notes, log.verdict, log.genre, log.media_type, log.location_venue, log.location_city, coll?.name, coll?.desc].filter(Boolean).join(" ").toLowerCase();
       return src.includes(q);
-    }).slice(0, 8);
+    }).map(log => {
+      const notesSnippet = getNotesSnippet(log.notes, q);
+      const matchesNotes = !!notesSnippet;
+      const matchesMeta = [log.title, log.creator, log.verdict, log.genre, log.media_type, log.location_venue, log.location_city].filter(Boolean).join(" ").toLowerCase().includes(q);
+      return { ...log, _notesSnippet: notesSnippet, _matchesNotes: matchesNotes, _matchesMeta: matchesMeta };
+    }).slice(0, 12);
   }, [logs, globalSearch, collections]);
 
   const availableYears = useMemo(() => {
@@ -301,11 +323,20 @@ export default function App() {
   const collEntriesCount = useMemo(() => logs.filter(l => l.collection_id).length, [logs]);
 
   // ── Actions ──
+  const [deepLinkNotes, setDeepLinkNotes] = useState(null); // id of entry to open notes for
+  const [deepLinkOpenId, setDeepLinkOpenId] = useState(null); // id of entry to pop the card open
+
   const handleGlobalResultClick = log => {
     setGlobalSearch(""); setGlobalSearchOpen(false);
     const isQ = log.verdict?.startsWith("Want to") || log.verdict === "Want to go" || log.verdict?.startsWith("Currently");
     setActiveTab(isQ ? "queue" : "history");
     setSavedEntryId(log.id);
+    // If match was in notes, signal that the notes should open
+    if (log._matchesNotes && !log._matchesMeta) {
+      setDeepLinkNotes(log.id);
+    } else {
+      setDeepLinkNotes(null);
+    }
   };
 
   const handleAuth = async e => {
@@ -395,6 +426,17 @@ export default function App() {
     setSearchResults([]); setSearchQuery(""); setGeoResults([]); setGeoQuery("");
   };
 
+  const handleCancelEdit = () => {
+    const returnTab = preEditTab || "history";
+    const returnId  = preEditLogId;
+    resetForm();
+    setActiveTab(returnTab);
+    // Re-open the card by treating it like a deep-link (reuse savedEntryId mechanism)
+    if (returnId) setSavedEntryId(returnId);
+    setPreEditTab(null);
+    setPreEditLogId(null);
+  };
+
   const handleDelete = id => {
     const item = logs.find(l => l.id === id);
     if (!item) return;
@@ -414,6 +456,8 @@ export default function App() {
   };
 
   const startEdit = log => {
+    setPreEditTab(activeTab);
+    setPreEditLogId(log.id);
     setEditingId(log.id); setTitle(log.title); setCreator(log.creator || "");
     setNotes(log.notes || ""); setYear(log.year_released || "");
     setMediaType(log.media_type); setActiveCat(getCat(log.media_type));
@@ -602,7 +646,7 @@ export default function App() {
                 const vs2 = gvs(log.verdict);
                 const ss2 = getSubtypeStyle(log.media_type);
                 return (
-                  <div key={log.id} onClick={() => { setActiveTab("history"); setSavedEntryId(log.id); }}
+                  <div key={log.id} onClick={() => { setHistoryDisplay("compact"); setActiveTab("history"); setDeepLinkOpenId(log.id); }}
                     style={{ background:theme.card, border:`1px solid ${theme.border}`, borderRadius:"12px", padding:"10px 12px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }}>
                     <div style={{ width:"36px", height:"50px", borderRadius:"7px", overflow:"hidden", flexShrink:0, background:darkMode?"#1a1a1a":"#eee", display:"flex", alignItems:"center", justifyContent:"center" }}>
                       {log.artwork ? <img src={log.artwork} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e => e.target.style.display="none"}/> : <span style={{ fontSize:"18px" }}>{ss2.icon}</span>}
@@ -760,7 +804,7 @@ export default function App() {
             <h1 style={{ fontSize:"22px", fontWeight:"700", letterSpacing:"-0.5px", margin:0, color:theme.text }}>{editingId ? "Edit entry" : "Log something"}</h1>
             <p style={{ fontSize:"12px", color:theme.subtext, margin:"3px 0 0" }}>{editingId ? "Make your changes below" : "What did you experience?"}</p>
           </div>
-          {editingId && <button onClick={resetForm} style={{ background:"none", border:`1px solid ${theme.border2}`, color:theme.subtext, fontSize:"11px", padding:"6px 12px", borderRadius:"20px", cursor:"pointer" }}>Cancel</button>}
+          {editingId && <button onClick={handleCancelEdit} style={{ background:"none", border:`1px solid ${theme.border2}`, color:theme.subtext, fontSize:"11px", padding:"6px 12px", borderRadius:"20px", cursor:"pointer" }}>Cancel</button>}
         </div>
 
         {/* Category selector */}
@@ -954,9 +998,28 @@ export default function App() {
         {/* Notes */}
         <div style={{ marginBottom:"8px" }}>
           <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Thoughts (optional)</label>
+          {!notes && (
+            <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginBottom:"8px" }}>
+              {[
+                "What would you tell a friend?",
+                "What image stays with you?",
+                "Did it change how you see something?",
+                "What feeling did it leave?",
+              ].map(prompt => (
+                <button key={prompt} onClick={() => { setNotes(prompt + " "); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                  style={{ fontSize:"10px", padding:"4px 10px", borderRadius:"20px",
+                    border:`1px solid ${theme.border2}`, background:"none",
+                    color:theme.subtext, cursor:"pointer", whiteSpace:"nowrap" }}>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea ref={textareaRef} placeholder="How did it make you feel? What stuck with you?…"
             value={notes} onChange={e => setNotes(e.target.value)}
-            style={{ ...inputStyle, height:"60px", overflow:"hidden", resize:"none", marginBottom:0 }}/>
+            style={{ ...inputStyle, height:"60px", overflow:"hidden", resize:"none", marginBottom:0,
+              fontSize:"15px", lineHeight:"1.7", fontStyle: notes ? "italic" : "normal",
+              transition:"font-style 0.2s" }}/>
         </div>
 
         <div style={{ marginBottom:"16px" }}>
@@ -1150,6 +1213,10 @@ export default function App() {
             onDelete={id => handleDelete(id)}
             onNotesUpdate={handleUpdateNotes}
             searchTerm={historySearch}
+            deepLinkNotesId={deepLinkNotes}
+            onDeepLinkConsumed={() => setDeepLinkNotes(null)}
+            deepLinkOpenId={deepLinkOpenId}
+            onDeepLinkOpenConsumed={() => setDeepLinkOpenId(null)}
           />
         ) : (
           <EditorialFeed
@@ -1158,6 +1225,8 @@ export default function App() {
             searchTerm={historySearch} collections={collections}
             onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
             onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+            deepLinkNotesId={deepLinkNotes}
+            onDeepLinkConsumed={() => setDeepLinkNotes(null)}
           />
         )
       )}
@@ -1171,6 +1240,14 @@ export default function App() {
     const active   = filteredQueue.filter(l => l.verdict?.startsWith("Currently"));
     const wishlist = filteredQueue.filter(l => l.verdict?.startsWith("Want to") || l.verdict === "Want to go");
     const isEmpty  = filteredQueue.length === 0;
+
+    const SectionLabel = ({ icon, title, count }) => (
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"16px 16px 8px" }}>
+        <span style={{ fontSize:16 }}>{icon}</span>
+        <span style={{ fontSize:14, fontWeight:700, color:theme.text }}>{title}</span>
+        <span style={{ fontSize:11, color:theme.subtext, marginLeft:2 }}>{count}</span>
+      </div>
+    );
 
     return (
       <div style={{ paddingBottom:100 }}>
@@ -1191,10 +1268,10 @@ export default function App() {
           <div style={{ display:"flex", gap:"6px", marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
             {["All","Read","Watched","Listened","Experienced"].map(f => {
               const def    = CATEGORIES[f];
-              const active = queueFilter === f;
+              const isActive = queueFilter === f;
               return (
                 <button key={f} onClick={() => setQueueFilter(f)}
-                  style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, border:`1px solid ${active?(def?.color||theme.border2):theme.border}`, background:active?(darkMode?`${def?.color||"#fff"}18`:`${def?.color||"#000"}10`):"none", color:active?(def?.color||theme.text):theme.subtext, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                  style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, border:`1px solid ${isActive?(def?.color||theme.border2):theme.border}`, background:isActive?(darkMode?`${def?.color||"#fff"}18`:`${def?.color||"#000"}10`):"none", color:isActive?(def?.color||theme.text):theme.subtext, fontSize:11, fontWeight:600, cursor:"pointer" }}>
                   {def ? `${def.icon} ${f}` : "All"}
                 </button>
               );
@@ -1210,13 +1287,39 @@ export default function App() {
             <button onClick={() => setActiveTab("log")} style={{ padding:"12px 24px", borderRadius:12, border:"none", background:darkMode?"rgba(255,180,60,0.15)":"#111", color:darkMode?"#f1c40f":"#fff", fontWeight:700, cursor:"pointer", fontSize:14 }}>Log something →</button>
           </div>
         ) : queueDisplay === "compact" ? (
-          <GridFeed
-            logs={filteredQueue}
-            darkMode={darkMode}
-            onEdit={log => startEdit(log)}
-            onDelete={id => handleDelete(id)}
-            onNotesUpdate={handleUpdateNotes}
-          />
+          <>
+            {/* ── IN PROGRESS ── */}
+            {active.length > 0 && (
+              <>
+                <SectionLabel icon="▶️" title="In Progress" count={active.length}/>
+                <GridFeed
+                  logs={active}
+                  darkMode={darkMode}
+                  onEdit={log => startEdit(log)}
+                  onDelete={id => handleDelete(id)}
+                  onNotesUpdate={handleUpdateNotes}
+                  deepLinkNotesId={deepLinkNotes}
+                  onDeepLinkConsumed={() => setDeepLinkNotes(null)}
+                />
+              </>
+            )}
+
+            {/* ── UP NEXT ── */}
+            {wishlist.length > 0 && (
+              <>
+                <SectionLabel icon="⏳" title="Up Next" count={wishlist.length}/>
+                <GridFeed
+                  logs={wishlist}
+                  darkMode={darkMode}
+                  onEdit={log => startEdit(log)}
+                  onDelete={id => handleDelete(id)}
+                  onNotesUpdate={handleUpdateNotes}
+                  deepLinkNotesId={deepLinkNotes}
+                  onDeepLinkConsumed={() => setDeepLinkNotes(null)}
+                />
+              </>
+            )}
+          </>
         ) : (
           <BedsideQueue
             logs={filteredQueue}
@@ -1244,7 +1347,7 @@ export default function App() {
     { id:"log",     icon:"✚", label:"Log" },
     { id:"history", icon:"📚", label:"History" },
     { id:"queue",   icon:"⏳", label:"Queue" },
-    { id:"threads", icon:"🗺", label:"Maps" },
+    { id:"journal", icon:"📅", label:"Journal" },
   ];
 
   return (
@@ -1272,21 +1375,37 @@ export default function App() {
                     const ss2 = getSubtypeStyle(log.media_type);
                     const coll = collections.find(c => c.id === log.collection_id);
                     const isQueue = log.verdict?.startsWith("Want to") || log.verdict === "Want to go" || log.verdict?.startsWith("Currently");
+                    // Highlight matching text in snippet
+                    const renderSnippet = (text) => {
+                      if (!text || globalSearch.length < 2) return text;
+                      const q = globalSearch.trim();
+                      const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")})`, "gi");
+                      const parts = text.split(re);
+                      return parts.map((p, i) =>
+                        re.test(p) ? <mark key={i} style={{ background:"rgba(241,196,15,0.3)", color:"#f1c40f", borderRadius:2, padding:"0 1px" }}>{p}</mark> : p
+                      );
+                    };
                     return (
-                      <div key={log.id} onClick={() => handleGlobalResultClick(log)} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${theme.border}` }}>
+                      <div key={log.id} onClick={() => handleGlobalResultClick(log)} style={{ display:"flex", alignItems:"flex-start", gap:"10px", padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${theme.border}` }}>
                         <div style={{ width:"36px", height:"50px", borderRadius:"7px", overflow:"hidden", flexShrink:0, background:darkMode?"#1a1a1a":"#eee", display:"flex", alignItems:"center", justifyContent:"center" }}>
                           {log.artwork ? <img src={log.artwork} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e => e.target.style.display="none"}/> : <span style={{ fontSize:"18px" }}>{ss2.icon}</span>}
                         </div>
                         <div style={{ flex:1, overflow:"hidden", minWidth:0 }}>
                           <div style={{ fontWeight:"700", fontSize:"13px", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{log.title}</div>
                           <div style={{ fontSize:"10px", color:theme.subtext, marginTop:"1px", marginBottom:"5px" }}>{ss2.icon} {log.media_type}{log.creator ? ` · ${log.creator}` : ""}</div>
-                          <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
+                          <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginBottom: log._notesSnippet ? "6px" : 0 }}>
                             <span style={{ fontSize:"9px", fontWeight:"700", padding:"1px 6px", borderRadius:"20px", border:`1px solid ${vs2.border}`, background:vs2.bg, color:vs2.color, whiteSpace:"nowrap" }}>{vs2.emoji} {log.verdict}</span>
                             {coll && <span style={{ fontSize:"9px", fontWeight:"700", padding:"1px 6px", borderRadius:"20px", border:`1px solid ${collAccent(coll.name)}55`, color:collAccent(coll.name), whiteSpace:"nowrap" }}>{coll.emoji} {coll.name}</span>}
                             {isQueue && <span style={{ fontSize:"9px", padding:"1px 6px", borderRadius:"20px", background:darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)", color:theme.subtext }}>In queue</span>}
                           </div>
+                          {log._notesSnippet && (
+                            <div style={{ fontSize:"11px", color:theme.subtext, fontStyle:"italic", lineHeight:"1.55",
+                              borderLeft:`2px solid ${darkMode?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`, paddingLeft:"7px" }}>
+                              💭 {renderSnippet(log._notesSnippet)}
+                            </div>
+                          )}
                         </div>
-                        <span style={{ fontSize:"11px", color:theme.subtext, flexShrink:0 }}>→</span>
+                        <span style={{ fontSize:"11px", color:theme.subtext, flexShrink:0, marginTop:2 }}>→</span>
                       </div>
                     );
                   })}
@@ -1332,7 +1451,8 @@ export default function App() {
         {activeTab === "log"     && renderLog()}
         {activeTab === "history" && renderHistory()}
         {activeTab === "queue"   && renderQueue()}
-        {activeTab === "threads" && <ThreadsTab logs={logs} links={links} theme={theme} darkMode={darkMode} onAddLink={addLink} onRemoveLink={removeLink} onEdit={log => startEdit(log)} mapHighlightId={mapHighlightId} getVerdictStyle={gvs} collections={collections} hiddenCollIds={hiddenCollIds}/>}
+        {activeTab === "journal" && <JournalTab logs={logs} theme={theme} darkMode={darkMode} onEdit={log => startEdit(log)} onDelete={handleDelete}/>}
+        {activeTab === "threads" && <ThreadsTab logs={logs} links={links} theme={theme} darkMode={darkMode} onAddLink={addLink} onRemoveLink={removeLink} onEdit={log => startEdit(log)} mapHighlightId={mapHighlightId} getVerdictStyle={gvs} collections={collections} hiddenCollIds={hiddenCollIds} hideMap={true}/>}
       </div>
 
       {/* ── TAB BAR ── */}

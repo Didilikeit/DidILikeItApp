@@ -599,7 +599,7 @@ const Constellation = ({ logs, links, theme, darkMode, onNodeClick, searchTerm =
 };
 
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
-export const ThreadsTab = ({ logs, links, theme, darkMode, onAddLink, onRemoveLink, onEdit, mapHighlightId, getVerdictStyle, collections = [], hiddenCollIds = new Set() }) => {
+export const ThreadsTab = ({ logs, links, theme, darkMode, onAddLink, onRemoveLink, onEdit, mapHighlightId, getVerdictStyle, collections = [], hiddenCollIds = new Set(), hideMap = false }) => {
   const [view, setView] = useState("constellation"); // "constellation" | "map"
   const [selectedLog, setSelectedLog] = useState(null);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
@@ -646,16 +646,17 @@ export const ThreadsTab = ({ logs, links, theme, darkMode, onAddLink, onRemoveLi
       <div style={{ padding: "14px 16px 10px", flexShrink: 0, borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontFamily: "'Bebas Neue', monospace", fontSize: 26, letterSpacing: "0.05em", color: theme.text, lineHeight: 1 }}>
-            {view === "constellation" ? "Mind Map" : "Map"}
+            {(view === "constellation" || hideMap) ? "Mind Map" : "Map"}
           </div>
           <div style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>
-            {view === "constellation"
+            {(view === "constellation" || hideMap)
               ? `${finishedLogs.length} entries · ${links.length} connection${links.length !== 1 ? "s" : ""}`
               : `Your experienced places`}
           </div>
         </div>
 
-        {/* Toggle */}
+        {/* Toggle — only show if map is enabled */}
+        {!hideMap && (
         <div style={{ display: "flex", background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", borderRadius: 22, padding: 3, gap: 2, width: 160 }}>
           <button style={pillBase(view === "constellation")} onClick={() => { setView("constellation"); setSelectedLog(null); }}>
             🧠 Mind Map
@@ -664,6 +665,7 @@ export const ThreadsTab = ({ logs, links, theme, darkMode, onAddLink, onRemoveLi
             🗺 Map
           </button>
         </div>
+        )}
       </div>
 
       {/* ── CONSTELLATION VIEW ── */}
@@ -748,7 +750,7 @@ export const ThreadsTab = ({ logs, links, theme, darkMode, onAddLink, onRemoveLi
       )}
 
       {/* ── MAP VIEW ── */}
-      {view === "map" && (
+      {view === "map" && !hideMap && (
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
           <MapTab
             logs={logs}

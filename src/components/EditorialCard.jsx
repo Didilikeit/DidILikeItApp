@@ -37,11 +37,17 @@ const VERDICT_BAND = v => ({
 }[v] || "linear-gradient(to bottom,rgba(255,255,255,0.1),rgba(255,255,255,0.03))");
 
 export const VERDICT_PILL_STYLE = v => ({
-  "I loved it":       { bg:"rgba(241,196,15,0.12)",  color:"#f1c40f",  border:"rgba(241,196,15,0.25)",  label:"★ Loved"  },
-  "I liked it":       { bg:"rgba(76,175,80,0.12)",   color:"#81c784",  border:"rgba(76,175,80,0.25)",   label:"● Liked"  },
-  "Meh":              { bg:"rgba(255,152,0,0.12)",   color:"#ffb74d",  border:"rgba(255,152,0,0.25)",   label:"~ Meh"    },
-  "I didn't like it": { bg:"rgba(231,76,60,0.12)",   color:"#e57373",  border:"rgba(231,76,60,0.25)",   label:"✕ Didn't" },
-  "Want to go":       { bg:"rgba(155,89,182,0.12)",  color:"#ce93d8",  border:"rgba(155,89,182,0.25)",  label:"📍 Want"  },
+  "I loved it":          { bg:"rgba(241,196,15,0.12)",  color:"#f1c40f",  border:"rgba(241,196,15,0.25)",  label:"★ Loved"      },
+  "I liked it":          { bg:"rgba(76,175,80,0.12)",   color:"#81c784",  border:"rgba(76,175,80,0.25)",   label:"● Liked"      },
+  "Meh":                 { bg:"rgba(255,152,0,0.12)",   color:"#ffb74d",  border:"rgba(255,152,0,0.25)",   label:"~ Meh"        },
+  "I didn't like it":    { bg:"rgba(231,76,60,0.12)",   color:"#e57373",  border:"rgba(231,76,60,0.25)",   label:"✕ Didn't"     },
+  "Want to go":          { bg:"rgba(155,89,182,0.12)",  color:"#ce93d8",  border:"rgba(155,89,182,0.25)",  label:"📍 Want"      },
+  "Want to read":        { bg:"rgba(155,89,182,0.12)",  color:"#ce93d8",  border:"rgba(155,89,182,0.25)",  label:"⏳ Want"      },
+  "Want to watch":       { bg:"rgba(155,89,182,0.12)",  color:"#ce93d8",  border:"rgba(155,89,182,0.25)",  label:"⏳ Want"      },
+  "Want to listen":      { bg:"rgba(155,89,182,0.12)",  color:"#ce93d8",  border:"rgba(155,89,182,0.25)",  label:"⏳ Want"      },
+  "Currently reading":   { bg:"rgba(100,181,246,0.12)", color:"#64b5f6",  border:"rgba(100,181,246,0.25)", label:"▶ Reading"    },
+  "Currently watching":  { bg:"rgba(100,181,246,0.12)", color:"#64b5f6",  border:"rgba(100,181,246,0.25)", label:"▶ Watching"   },
+  "Currently listening": { bg:"rgba(100,181,246,0.12)", color:"#64b5f6",  border:"rgba(100,181,246,0.25)", label:"▶ Listening"  },
 }[v] || { bg:"rgba(255,255,255,0.06)", color:"#888", border:"rgba(255,255,255,0.1)", label: v || "–" });
 
 // ─── ARTWORK FALLBACK ─────────────────────────────────────────────────────────
