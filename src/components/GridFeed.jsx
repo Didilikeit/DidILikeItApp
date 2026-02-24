@@ -298,6 +298,12 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
               {loggedOnLabel(log)}
             </div>
           )}
+          {log.recommended_by && (
+            <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:8,
+              color:"rgba(255,255,255,0.5)", letterSpacing:"0.08em" }}>
+              👤 Rec'd by {log.recommended_by}
+            </div>
+          )}
           {/* Progress bar in expand panel */}
           {log.verdict?.startsWith("Currently") && (() => {
             let pct = null, label = null;

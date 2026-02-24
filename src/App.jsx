@@ -71,6 +71,7 @@ export default function App() {
   const [locationLng, setLocationLng] = useState(null);
   const [collectionId, setCollectionId] = useState("");
   const [inspiredBy, setInspiredBy] = useState(""); // id of the entry that led to this one
+  const [recommendedBy, setRecommendedBy] = useState(""); // name of person who recommended this
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef(null);
@@ -390,6 +391,7 @@ export default function App() {
       lat: locationLat || null, lng: locationLng || null,
       collection_id: collectionId || null,
       manualDate: manualDate || null,
+      recommended_by: recommendedBy.trim() || null,
     };
     try {
       await saveLog({ logData, editingId, user, verdict });
@@ -422,7 +424,7 @@ export default function App() {
     setTitle(""); setCreator(""); setNotes(""); setYear(""); setVerdict("");
     setManualDate(""); setCurrentPage(""); setTotalPages(""); setCurrentEpisode(""); setTotalEpisodes(""); setCurrentSeason(""); setArtwork(""); setGenre("");
     setLocationVenue(""); setLocationCity(""); setLocationLat(null); setLocationLng(null);
-    setCollectionId(""); setInspiredBy(""); setEditingId(null);
+    setCollectionId(""); setInspiredBy(""); setRecommendedBy(""); setEditingId(null);
     setSearchResults([]); setSearchQuery(""); setGeoResults([]); setGeoQuery("");
   };
 
@@ -468,6 +470,7 @@ export default function App() {
     setLocationVenue(log.location_venue || "");
     setLocationCity(log.location_city || ""); setLocationLat(log.lat || null);
     setLocationLng(log.lng || null); setCollectionId(log.collection_id || "");
+    setRecommendedBy(log.recommended_by || "");
     // Pre-fill inspired-by from existing links (find what this entry was inspired by)
     const existingLink = links.find(lk => lk.b === log.id);
     setInspiredBy(existingLink ? existingLink.a : "");
@@ -960,67 +963,98 @@ export default function App() {
           </div>
         )}
 
-        {/* ── INSPIRED BY ── */}
+        {/* ── RECOMMENDED BY ── */}
+        <div style={{ marginBottom:"12px" }}>
+          <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>
+            👤 Recommended by <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:theme.subtext }}>(optional)</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Tom, Dick, Harry, The Guardian…"
+            value={recommendedBy}
+            onChange={e => setRecommendedBy(e.target.value)}
+            style={{ ...inputStyle, marginBottom:0 }}
+          />
+        </div>
+
+        {/* Notes */}
         {(() => {
-          const finishedLogs = logs.filter(l => ["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict));
-          if (finishedLogs.length === 0) return null;
-          const picked = inspiredBy ? logs.find(l => l.id === inspiredBy) : null;
+          const TEMPLATES = [
+            {
+              label: "3 thoughts",
+              icon: "✦",
+              text: "1. \n\n2. \n\n3. ",
+            },
+            {
+              label: "5 thoughts",
+              icon: "✦✦",
+              text: "1. \n\n2. \n\n3. \n\n4. \n\n5. ",
+            },
+            {
+              label: "Liked / didn't",
+              icon: "±",
+              text: "What I liked:\n\nWhat I didn't:\n",
+            },
+            {
+              label: "Would I return?",
+              icon: "↩",
+              text: "Would I return / recommend?\n\nWhy:\n",
+            },
+            {
+              label: "One image",
+              icon: "◎",
+              text: "The image that stays with me:\n\n",
+            },
+            {
+              label: "Changed me?",
+              icon: "△",
+              text: "Did it change how I see something?\n\n",
+            },
+          ];
+
+          const applyTemplate = (tpl) => {
+            if (notes && notes.trim()) {
+              if (!window.confirm("Replace your current notes with this template?")) return;
+            }
+            setNotes(tpl.text);
+            setTimeout(() => {
+              const ta = textareaRef.current;
+              if (!ta) return;
+              ta.focus();
+              // Place cursor at the first meaningful position
+              const pos = tpl.text.indexOf("\n") !== -1 ? tpl.text.indexOf("\n") : tpl.text.length;
+              ta.setSelectionRange(pos, pos);
+            }, 50);
+          };
+
           return (
-            <div style={{ marginBottom:"12px" }}>
+            <div style={{ marginBottom:"8px" }}>
               <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>
-                🧠 Inspired by… <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:theme.subtext }}>(links this in the mind map)</span>
+                Thoughts (optional)
               </label>
-              {picked ? (
-                <div style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 12px", borderRadius:"10px", border:`1px solid rgba(52,152,219,0.4)`, background:`rgba(52,152,219,0.08)` }}>
-                  {picked.artwork && <img src={picked.artwork} alt="" style={{ width:28, height:38, borderRadius:4, objectFit:"cover", flexShrink:0 }} onError={e => e.target.style.display="none"}/>}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:"700", fontSize:"13px", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{picked.title}</div>
-                    <div style={{ fontSize:"10px", color:theme.subtext }}>{picked.media_type}{picked.creator ? ` · ${picked.creator}` : ""}</div>
-                  </div>
-                  <button onClick={() => setInspiredBy("")} style={{ background:"none", border:"none", color:theme.subtext, fontSize:"16px", cursor:"pointer", padding:"2px 4px", flexShrink:0 }}>✕</button>
-                </div>
-              ) : (
-                <select
-                  value={inspiredBy}
-                  onChange={e => setInspiredBy(e.target.value)}
-                  style={{ ...inputStyle, marginBottom:0, color: inspiredBy ? theme.text : theme.subtext }}
-                >
-                  <option value="">Not inspired by anything specific</option>
-                  {finishedLogs.slice(0, 60).map(l => (
-                    <option key={l.id} value={l.id}>{l.title}{l.creator ? ` — ${l.creator}` : ""}</option>
-                  ))}
-                </select>
-              )}
+              {/* Template pills — always visible */}
+              <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginBottom:"8px" }}>
+                {TEMPLATES.map(tpl => (
+                  <button key={tpl.label} onClick={() => applyTemplate(tpl)}
+                    style={{
+                      fontSize:"10px", padding:"4px 10px", borderRadius:"20px",
+                      border:`1px solid ${theme.border2}`,
+                      background: notes && notes === tpl.text ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)") : "none",
+                      color: theme.subtext, cursor:"pointer", whiteSpace:"nowrap",
+                      display:"flex", alignItems:"center", gap:"4px",
+                    }}>
+                    <span style={{ opacity:0.5 }}>{tpl.icon}</span> {tpl.label}
+                  </button>
+                ))}
+              </div>
+              <textarea ref={textareaRef} placeholder="How did it make you feel? What stuck with you?…"
+                value={notes} onChange={e => setNotes(e.target.value)}
+                style={{ ...inputStyle, height:"60px", overflow:"hidden", resize:"none", marginBottom:0,
+                  fontSize:"15px", lineHeight:"1.7", fontStyle: notes ? "italic" : "normal",
+                  transition:"font-style 0.2s" }}/>
             </div>
           );
         })()}
-
-        {/* Notes */}
-        <div style={{ marginBottom:"8px" }}>
-          <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Thoughts (optional)</label>
-          {!notes && (
-            <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginBottom:"8px" }}>
-              {[
-                "What would you tell a friend?",
-                "What image stays with you?",
-                "Did it change how you see something?",
-                "What feeling did it leave?",
-              ].map(prompt => (
-                <button key={prompt} onClick={() => { setNotes(prompt + " "); setTimeout(() => textareaRef.current?.focus(), 50); }}
-                  style={{ fontSize:"10px", padding:"4px 10px", borderRadius:"20px",
-                    border:`1px solid ${theme.border2}`, background:"none",
-                    color:theme.subtext, cursor:"pointer", whiteSpace:"nowrap" }}>
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          )}
-          <textarea ref={textareaRef} placeholder="How did it make you feel? What stuck with you?…"
-            value={notes} onChange={e => setNotes(e.target.value)}
-            style={{ ...inputStyle, height:"60px", overflow:"hidden", resize:"none", marginBottom:0,
-              fontSize:"15px", lineHeight:"1.7", fontStyle: notes ? "italic" : "normal",
-              transition:"font-style 0.2s" }}/>
-        </div>
 
         <div style={{ marginBottom:"16px" }}>
           <label style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.08em", textTransform:"uppercase", display:"block", marginBottom:"6px" }}>Log date (optional)</label>
