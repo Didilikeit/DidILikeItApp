@@ -53,8 +53,7 @@ const ArtworkTile = ({ log }) => {
 };
 
 // ─── NOTES SIDE PANEL ─────────────────────────────────────────────────────────
-// Slides in from the right over the bottom sheet.
-// The 22% left strip taps back to the card sheet.
+// Slides in from the right, full-width, so the card behind doesn't distract.
 const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
   const [localNotes, setLocalNotes] = useState(log.notes || "");
   const [editing, setEditing] = useState(false);
@@ -63,8 +62,8 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
 
   const btn = {
     flex: 1, padding: "8px 4px", borderRadius: "6px",
-    border: "1px solid rgba(255,255,255,0.07)", background: "none",
-    color: "rgba(255,255,255,0.3)", fontFamily: "'Unbounded',sans-serif",
+    border: "1px solid rgba(255,255,255,0.1)", background: "none",
+    color: "rgba(255,255,255,0.5)", fontFamily: "'Unbounded',sans-serif",
     fontSize: "7px", fontWeight: "700", letterSpacing: "0.1em",
     textTransform: "uppercase", cursor: "pointer", textAlign: "center",
   };
@@ -73,51 +72,46 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
     <>
       <style>{`
         @keyframes gridNoteSlide {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
         }
       `}</style>
 
-      {/* 22% left strip — tap to dismiss back to card sheet */}
-      <div onClick={onClose}
-        style={{ position:"absolute", top:0, left:0, bottom:0, width:"22%", zIndex:19, cursor:"pointer" }}/>
-
-      {/* Sliding panel */}
+      {/* Full-width panel — covers the card completely */}
       <div onClick={e => e.stopPropagation()}
         style={{
-          position: "absolute", top: 0, right: 0, bottom: 0, width: "78%",
-          background: "rgba(5,5,5,0.97)",
-          backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+          position: "absolute", inset: 0,
+          background: "#080808",
           zIndex: 20, display: "flex", flexDirection: "column",
-          borderLeft: "1px solid rgba(255,255,255,0.07)",
-          animation: "gridNoteSlide 0.25s cubic-bezier(0.25,0.46,0.45,0.94)",
+          animation: "gridNoteSlide 0.28s cubic-bezier(0.25,0.46,0.45,0.94)",
         }}>
 
-        {/* Feather edge on the left */}
-        <div style={{
-          position: "absolute", top: 0, left: "-20px", bottom: 0, width: "20px",
-          background: "linear-gradient(to right,transparent,rgba(5,5,5,0.97))",
-          pointerEvents: "none",
-        }}/>
-
         {/* Header */}
-        <div style={{ padding: "16px 14px 10px", flexShrink: 0 }}>
-          <div style={{
-            fontFamily: "'Unbounded',sans-serif", fontSize: "7px", fontWeight: "700",
-            letterSpacing: "0.2em", textTransform: "uppercase",
-            color: "rgba(255,255,255,0.2)", marginBottom: "6px",
-          }}>
-            MY NOTES
+        <div style={{ padding: "14px 16px 10px", flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          {/* Back chevron */}
+          <button onClick={onClose}
+            style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+              fontSize: 20, cursor: "pointer", padding: "0 4px 0 0", lineHeight: 1, flexShrink: 0, marginTop: 2 }}>
+            ‹
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'Unbounded',sans-serif", fontSize: "7px", fontWeight: "700",
+              letterSpacing: "0.2em", textTransform: "uppercase",
+              color: "rgba(255,255,255,0.35)", marginBottom: "5px",
+            }}>
+              MY NOTES
+            </div>
+            <div style={{
+              fontFamily: "'DM Serif Display',serif", fontSize: "17px", color: "#fff",
+              lineHeight: "1.2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>
+              {log.title}
+            </div>
           </div>
-          <div style={{
-            fontFamily: "'DM Serif Display',serif", fontSize: "16px", color: "#fff",
-            lineHeight: "1.2", marginBottom: "12px",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {log.title}
-          </div>
-          <div style={{ height: "1px", background: "rgba(255,255,255,0.06)" }}/>
         </div>
+
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", flexShrink: 0 }}/>
 
         {/* Body */}
         {editing ? (
@@ -127,37 +121,36 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
             autoFocus
             style={{
               flex: 1, width: "100%", background: "none", border: "none",
-              borderTop: "1px solid rgba(255,255,255,0.07)",
-              padding: "14px", fontFamily: "'DM Serif Display',serif",
-              fontStyle: "italic", fontSize: "14px",
-              color: "rgba(255,255,255,0.85)", lineHeight: "1.9",
+              padding: "16px", fontFamily: "'DM Serif Display',serif",
+              fontStyle: "italic", fontSize: "15px",
+              color: "rgba(255,255,255,0.9)", lineHeight: "1.9",
               resize: "none", outline: "none", boxSizing: "border-box",
             }}
           />
         ) : (
-          <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px", WebkitOverflowScrolling: "touch" }}>
             <div style={{
               fontFamily: "'DM Serif Display',serif", fontStyle: "italic",
-              fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: "1.85",
+              fontSize: "15px", color: "rgba(255,255,255,0.85)", lineHeight: "1.9",
               whiteSpace: "pre-wrap", wordBreak: "break-word",
             }}>
               {log.notes
                 ? log.notes
                 : <span style={{
-                    color: "rgba(255,255,255,0.15)", fontFamily: "'Unbounded',sans-serif",
-                    fontSize: "8px", letterSpacing: "0.1em",
-                  }}>NO NOTES YET</span>
+                    color: "rgba(255,255,255,0.2)", fontFamily: "'Unbounded',sans-serif",
+                    fontSize: "8px", letterSpacing: "0.12em",
+                  }}>NO NOTES YET — TAP EDIT TO ADD</span>
               }
             </div>
           </div>
         )}
 
         {/* Footer */}
-        <div style={{ padding: "10px 14px 14px", borderTop: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
+        <div style={{ padding: "10px 16px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
           {editing ? (
-            <div style={{ display: "flex", gap: "5px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
               <button onClick={handleSave}
-                style={{ ...btn, background: "rgba(255,255,255,0.1)", color: "#fff", border: "none" }}>
+                style={{ ...btn, background: "rgba(255,255,255,0.12)", color: "#fff", border: "none", flex: 2 }}>
                 SAVE
               </button>
               <button onClick={() => { setLocalNotes(log.notes || ""); setEditing(false); }} style={btn}>
@@ -165,9 +158,9 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
               </button>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: "5px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
               <button onClick={onClose} style={btn}>← BACK</button>
-              <button onClick={() => setEditing(true)} style={btn}>✏ EDIT</button>
+              <button onClick={() => setEditing(true)} style={{ ...btn, flex: 2 }}>✏ EDIT NOTES</button>
               <button onClick={() => navigator.clipboard?.writeText(log.notes || "")} style={btn}>📋</button>
             </div>
           )}
