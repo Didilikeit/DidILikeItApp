@@ -147,6 +147,9 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
+  const [lightboxImg, setLightboxImg] = useState(null);
+  const pressTimer = React.useRef(null);
+  const didLongPress = React.useRef(false);
 
   const logsByDate = useMemo(() => {
     const map = {};
@@ -229,10 +232,25 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
 
               return (
                 <div key={di}
-                  onClick={() => setSelectedDay(isSelected ? null : day)}
+                  onClick={() => { if (!didLongPress.current) setSelectedDay(isSelected ? null : day); }}
+                  onTouchStart={() => {
+                    didLongPress.current = false;
+                    if (!hasLogs || !topLog?.artwork) return;
+                    pressTimer.current = setTimeout(() => { didLongPress.current = true; setLightboxImg(topLog.artwork); }, 450);
+                  }}
+                  onTouchEnd={() => clearTimeout(pressTimer.current)}
+                  onTouchMove={() => clearTimeout(pressTimer.current)}
+                  onMouseDown={() => {
+                    didLongPress.current = false;
+                    if (!hasLogs || !topLog?.artwork) return;
+                    pressTimer.current = setTimeout(() => { didLongPress.current = true; setLightboxImg(topLog.artwork); }, 450);
+                  }}
+                  onMouseUp={() => clearTimeout(pressTimer.current)}
+                  onMouseLeave={() => clearTimeout(pressTimer.current)}
                   style={{
                     position: "relative", aspectRatio: "1", borderRadius: 5,
                     overflow: "hidden", cursor: hasLogs ? "pointer" : "default",
+                    WebkitUserSelect: "none", userSelect: "none",
                     border: isSelected
                       ? `2px solid ${theme.text}`
                       : isToday
@@ -347,6 +365,27 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxImg && (
+        <div onClick={() => setLightboxImg(null)}
+          style={{
+            position:"fixed", inset:0, zIndex:600,
+            background:"rgba(0,0,0,0.92)",
+            backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            animation:"lbIn 0.18s ease",
+          }}>
+          <style>{`@keyframes lbIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}`}</style>
+          <img src={lightboxImg} alt=""
+            style={{ maxWidth:"95vw", maxHeight:"90vh", objectFit:"contain",
+              borderRadius:8, boxShadow:"0 20px 80px rgba(0,0,0,0.8)", pointerEvents:"none" }}/>
+          <div style={{ position:"absolute", top:20, right:20, width:36, height:36, borderRadius:"50%",
+            background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            color:"rgba(255,255,255,0.6)", fontSize:16, cursor:"pointer" }}>✕</div>
         </div>
       )}
     </div>

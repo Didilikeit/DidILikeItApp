@@ -467,6 +467,16 @@ export default function App() {
     setCurrentPage(log.current_page || ""); setTotalPages(log.total_pages || "");
     setCurrentEpisode(log.current_episode || ""); setTotalEpisodes(log.total_episodes || "");
     setCurrentSeason(log.current_season || "");
+    // Pre-fill the log date so editing doesn't reset it to today
+    if (log.logged_at) {
+      const d = new Date(log.logged_at);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const dd = String(d.getDate()).padStart(2,"0");
+      setManualDate(`${yyyy}-${mm}-${dd}`);
+    } else {
+      setManualDate("");
+    }
     setLocationVenue(log.location_venue || "");
     setLocationCity(log.location_city || ""); setLocationLat(log.lat || null);
     setLocationLng(log.lng || null); setCollectionId(log.collection_id || "");
@@ -970,7 +980,7 @@ export default function App() {
           </label>
           <input
             type="text"
-            placeholder="e.g. Tom, Dick, Harry, The Guardian…"
+            placeholder="e.g. Jack, Chris, Mum…"
             value={recommendedBy}
             onChange={e => setRecommendedBy(e.target.value)}
             style={{ ...inputStyle, marginBottom:0 }}

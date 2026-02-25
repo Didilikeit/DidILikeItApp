@@ -26,6 +26,8 @@ const loggedOnLabel = (log) => {
   if (!log.logged_at) return null;
   const d = new Date(log.logged_at);
   const dateStr = d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
+  const isQueue = log.verdict?.startsWith("Want to") || log.verdict === "Want to go" || log.verdict?.startsWith("Currently");
+  if (isQueue) return `Added on ${dateStr}`;
   const cat = getSubtypeStyle(log.media_type)?.cat || "";
   const verb = cat==="Read" ? "Read on" : cat==="Watched" ? "Watched on"
     : cat==="Listened" ? "Listened on" : cat==="Experienced" ? "Went on" : "Logged";
@@ -398,6 +400,9 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
 // ─── GRID FEED ────────────────────────────────────────────────────────────────
 export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, searchTerm = "", deepLinkNotesId, onDeepLinkConsumed, deepLinkOpenId, onDeepLinkOpenConsumed }) => {
   const [selected, setSelected] = useState(null);
+  const [lightboxImg, setLightboxImg] = useState(null); // src string when showing fullscreen
+  const pressTimer = React.useRef(null);
+  const didLongPress = React.useRef(false);
   const GAP = 2;
 
   if (!logs.length) return null;
@@ -462,9 +467,30 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
 
           return (
             <div key={log.id}
-              onClick={() => setSelected(log)}
+              onClick={() => { if (!didLongPress.current) setSelected(log); }}
+              onTouchStart={() => {
+                didLongPress.current = false;
+                if (!log.artwork) return;
+                pressTimer.current = setTimeout(() => {
+                  didLongPress.current = true;
+                  setLightboxImg(log.artwork);
+                }, 450);
+              }}
+              onTouchEnd={() => clearTimeout(pressTimer.current)}
+              onTouchMove={() => clearTimeout(pressTimer.current)}
+              onMouseDown={() => {
+                didLongPress.current = false;
+                if (!log.artwork) return;
+                pressTimer.current = setTimeout(() => {
+                  didLongPress.current = true;
+                  setLightboxImg(log.artwork);
+                }, 450);
+              }}
+              onMouseUp={() => clearTimeout(pressTimer.current)}
+              onMouseLeave={() => clearTimeout(pressTimer.current)}
               style={{ position:"relative", aspectRatio:"1", cursor:"pointer",
-                borderRadius:3, overflow:"hidden", background:"#0f0f0f" }}>
+                borderRadius:3, overflow:"hidden", background:"#0f0f0f",
+                WebkitUserSelect:"none", userSelect:"none" }}>
 
               <ArtworkTile log={log}/>
 
@@ -560,6 +586,39 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
           onNotesUpdate={onNotesUpdate}
           openNotesImmediately={!!selected._openNotes}
         />
+      )}
+
+      {/* ── Lightbox ── */}
+      {lightboxImg && (
+        <div
+          onClick={() => setLightboxImg(null)}
+          style={{
+            position:"fixed", inset:0, zIndex:600,
+            background:"rgba(0,0,0,0.92)",
+            backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            animation:"lbIn 0.18s ease",
+          }}>
+          <style>{`
+            @keyframes lbIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
+          `}</style>
+          <img
+            src={lightboxImg} alt=""
+            style={{
+              maxWidth:"95vw", maxHeight:"90vh",
+              objectFit:"contain", borderRadius:8,
+              boxShadow:"0 20px 80px rgba(0,0,0,0.8)",
+              pointerEvents:"none",
+            }}
+          />
+          <div style={{
+            position:"absolute", top:20, right:20,
+            width:36, height:36, borderRadius:"50%",
+            background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            color:"rgba(255,255,255,0.6)", fontSize:16, cursor:"pointer",
+          }}>✕</div>
+        </div>
       )}
     </>
   );
