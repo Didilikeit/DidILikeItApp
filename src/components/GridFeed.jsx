@@ -35,6 +35,12 @@ const loggedOnLabel = (log) => {
 };
 
 // ─── ARTWORK TILE ─────────────────────────────────────────────────────────────
+const noSelect = {
+  WebkitUserSelect: "none", userSelect: "none",
+  WebkitTouchCallout: "none",
+  pointerEvents: "none", // tile wrapper handles all touch events
+};
+
 const ArtworkTile = ({ log }) => {
   const [err, setErr] = useState(false);
   const ss = getSubtypeStyle(log.media_type);
@@ -42,13 +48,16 @@ const ArtworkTile = ({ log }) => {
   if (log.artwork && !err) {
     return (
       <img src={log.artwork} alt="" onError={() => setErr(true)}
-        style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}/>
+        onContextMenu={e => e.preventDefault()}
+        draggable={false}
+        style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+          objectFit:"cover", ...noSelect }}/>
     );
   }
   return (
     <div style={{ position:"absolute", inset:0,
       background:`linear-gradient(145deg,${color1},${color2})`,
-      display:"flex", alignItems:"center", justifyContent:"center" }}>
+      display:"flex", alignItems:"center", justifyContent:"center", ...noSelect }}>
       <span style={{ fontSize:22, opacity:0.5 }}>{ss.icon}</span>
     </div>
   );
@@ -416,6 +425,26 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
     }
   }, [logs]);
 
+  // Push history state when a card is opened so Android back closes it
+  useEffect(() => {
+    if (selected) window.history.pushState({ dili: "card" }, "");
+  }, [selected?.id]);
+
+  // Android back button — close card/notes panel, then re-push sentinel
+  useEffect(() => {
+    const onPop = () => {
+      if (selected) {
+        setSelected(null);
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      // Nothing open here — re-push so App.jsx handler gets next back press
+      window.history.pushState({ dili: "sentinel" }, "");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [selected]);
+
   // Deep-link from search: open the entry and jump straight to notes side panel
   useEffect(() => {
     if (deepLinkNotesId) {
@@ -490,7 +519,10 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
               onMouseLeave={() => clearTimeout(pressTimer.current)}
               style={{ position:"relative", aspectRatio:"1", cursor:"pointer",
                 borderRadius:3, overflow:"hidden", background:"#0f0f0f",
-                WebkitUserSelect:"none", userSelect:"none" }}>
+                WebkitUserSelect:"none", userSelect:"none",
+                WebkitTouchCallout:"none",
+                WebkitTapHighlightColor:"transparent",
+                touchAction:"manipulation" }}>
 
               <ArtworkTile log={log}/>
 

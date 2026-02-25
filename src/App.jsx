@@ -219,6 +219,76 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // ── Android hardware back button ──
+  // Strategy: always keep at least one history entry above the "real" page so
+  // popstate fires instead of the browser/webview exiting the app.
+  // On mount we push a sentinel. Every handler that has nothing left to close
+  // immediately re-pushes the sentinel so the stack never bottoms out.
+  const prevTabRef = useRef("home");
+  useEffect(() => {
+    if (activeTab !== "log") prevTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Push a sentinel on first mount so back never exits immediately
+  useEffect(() => {
+    window.history.pushState({ dili: "sentinel" }, "");
+  }, []);
+
+  // Push state when each overlay opens
+  useEffect(() => {
+    if (showQuickLog) window.history.pushState({ dili: "quicklog" }, "");
+  }, [showQuickLog]);
+
+  useEffect(() => {
+    if (activeTab === "log") window.history.pushState({ dili: "log" }, "");
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (globalSearchOpen) window.history.pushState({ dili: "search" }, "");
+  }, [globalSearchOpen]);
+
+  useEffect(() => {
+    if (showAuthModal) window.history.pushState({ dili: "auth" }, "");
+  }, [showAuthModal]);
+
+  // Handle back press — dismiss overlays in priority order, never exit app
+  useEffect(() => {
+    const onPop = () => {
+      // Priority: auth modal → search → quicklog → log form → tab nav → sentinel
+      if (showAuthModal) {
+        setShowAuthModal(false);
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      if (globalSearchOpen) {
+        setGlobalSearchOpen(false);
+        setGlobalSearch("");
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      if (showQuickLog) {
+        setShowQuickLog(false);
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      if (activeTab === "log") {
+        setActiveTab(prevTabRef.current || "home");
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      // On any non-home tab, back goes to home
+      if (activeTab !== "home") {
+        setActiveTab("home");
+        window.history.pushState({ dili: "sentinel" }, "");
+        return;
+      }
+      // Already on home with nothing open — re-push sentinel to stay in app
+      window.history.pushState({ dili: "sentinel" }, "");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [showAuthModal, globalSearchOpen, showQuickLog, activeTab]);
+
   // ── Auth init ──
   useEffect(() => {
     const init = async () => {

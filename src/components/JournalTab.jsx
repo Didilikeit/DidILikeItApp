@@ -52,16 +52,19 @@ const CalArt = ({ log }) => {
   const [err, setErr] = useState(false);
   const ss = getSubtypeStyle(log.media_type);
   const { color1, color2 } = generateCoverGradient(log.title || "");
+  const noSel = { WebkitUserSelect:"none", userSelect:"none",
+    WebkitTouchCallout:"none", pointerEvents:"none" };
   if (log.artwork && !err) {
     return (
       <img src={log.artwork} alt={log.title} onError={() => setErr(true)}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+        onContextMenu={e => e.preventDefault()} draggable={false}
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", ...noSel }}/>
     );
   }
   return (
     <div style={{ width: "100%", height: "100%",
       background: `linear-gradient(145deg,${color1},${color2})`,
-      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, ...noSel }}>
       {ss.icon}
     </div>
   );
@@ -139,23 +142,23 @@ const MonthSection = ({ label, logs, darkMode, theme, onTap }) => (
   </div>
 );
 
-// ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
-const DAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+// ─── CALENDAR VIEW — Photo Mosaic ─────────────────────────────────────────────
+const DAY_LETTERS = ["M","T","W","T","F","S","S"];
 
 const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
+  const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [selectedDay, setSelectedDay] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null);
-  const pressTimer = React.useRef(null);
+  const pressTimer   = React.useRef(null);
   const didLongPress = React.useRef(false);
 
+  // Build date → logs map
   const logsByDate = useMemo(() => {
     const map = {};
     logs.forEach(log => {
       if (!log.logged_at) return;
-      const d = new Date(log.logged_at);
+      const d   = new Date(log.logged_at);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       if (!map[key]) map[key] = [];
       map[key].push(log);
@@ -163,140 +166,202 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
     return map;
   }, [logs]);
 
-  const { weeks } = useMemo(() => {
-    const first = new Date(year, month, 1);
-    const last  = new Date(year, month + 1, 0);
+  // Build week grid
+  const weeks = useMemo(() => {
+    const first    = new Date(year, month, 1);
+    const last     = new Date(year, month + 1, 0);
     const startDow = (first.getDay() + 6) % 7;
-    const cells = [];
+    const cells    = [];
     for (let i = 0; i < startDow; i++) cells.push(null);
     for (let d = 1; d <= last.getDate(); d++) cells.push(d);
     while (cells.length % 7 !== 0) cells.push(null);
-    const weeks = [];
-    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-    return { weeks };
+    const wks = [];
+    for (let i = 0; i < cells.length; i += 7) wks.push(cells.slice(i, i + 7));
+    return wks;
   }, [year, month]);
 
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); setSelectedDay(null); };
-  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y+1); } else setMonth(m => m+1); setSelectedDay(null); };
+  // All entries this month sorted by day for the scroll strip
+  const monthEntries = useMemo(() => {
+    return Object.entries(logsByDate)
+      .filter(([key]) => {
+        const [y, m] = key.split("-").map(Number);
+        return y === year && m === month + 1;
+      })
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([key, ls]) => ls.map(l => ({ ...l, _dateKey: key })));
+  }, [logsByDate, year, month]);
 
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-  const selectedKey = selectedDay ? `${year}-${String(month+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}` : null;
-  const selectedLogs = selectedKey ? (logsByDate[selectedKey] || []) : [];
 
-  // Adaptive colours
-  const navBtnStyle = {
-    width: 32, height: 32, borderRadius: "50%",
-    border: `1px solid ${theme.border2}`,
-    background: "none", color: theme.text,
-    fontSize: 16, cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center",
+  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
+  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y+1); } else setMonth(m => m+1); };
+
+  const monthName  = new Date(year, month, 1).toLocaleString("default", { month: "long" });
+  const totalCount = monthEntries.length;
+  const lovedCount = monthEntries.filter(l => l.verdict === "I loved it").length;
+
+  const noSel = {
+    WebkitUserSelect:"none", userSelect:"none",
+    WebkitTouchCallout:"none", WebkitTapHighlightColor:"transparent",
+    touchAction:"manipulation",
   };
 
   return (
     <div style={{ paddingBottom: 100 }}>
-      {/* Month nav */}
-      <div style={{ display: "flex", alignItems: "center", padding: "14px 16px 12px", gap: 12 }}>
-        <button onClick={prevMonth} style={navBtnStyle}>‹</button>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, color: theme.text, lineHeight: 1 }}>
-            {new Date(year, month, 1).toLocaleString("default", { month: "long" })}
+      <style>{`
+        @keyframes lbIn { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+        @keyframes tileIn { from{opacity:0;transform:scale(0.94)} to{opacity:1;transform:scale(1)} }
+      `}</style>
+
+      {/* ── HEADER ── */}
+      <div style={{ padding:"14px 16px 10px", display:"flex",
+        justifyContent:"space-between", alignItems:"flex-start",
+        borderBottom:`1px solid ${theme.border}` }}>
+        <div>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:26,
+            color:theme.text, lineHeight:1 }}>{monthName}</div>
+          <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7,
+            letterSpacing:"0.15em", color:theme.subtext, marginTop:4 }}>
+            {year} · {totalCount} LOGGED{lovedCount > 0 ? ` · ${lovedCount} ★` : ""}
           </div>
-          <div style={{ fontFamily: "'Unbounded',sans-serif", fontSize: 8, letterSpacing: "0.15em",
-            color: theme.subtext, marginTop: 3 }}>{year}</div>
         </div>
-        <button onClick={nextMonth} style={navBtnStyle}>›</button>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <button onClick={prevMonth}
+            style={{ background:"none", border:`1px solid ${theme.border2}`, borderRadius:8,
+              width:34, height:34, color:theme.subtext, fontSize:18, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+          <button onClick={nextMonth}
+            style={{ background:"none", border:`1px solid ${theme.border2}`, borderRadius:8,
+              width:34, height:34, color:theme.subtext, fontSize:18, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+        </div>
       </div>
 
-      {/* Day headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, padding: "0 4px", marginBottom: 2 }}>
-        {DAYS.map(d => (
-          <div key={d} style={{ textAlign: "center", fontFamily: "'Unbounded',sans-serif", fontSize: 7,
-            letterSpacing: "0.1em", color: theme.subtext, padding: "4px 0" }}>
-            {d}
-          </div>
+      {/* Verdict colour bar */}
+      {monthEntries.length > 0 && (
+        <div style={{ display:"flex", height:3, overflow:"hidden" }}>
+          {monthEntries.map((l, i) => (
+            <div key={i} style={{ flex:1, background:VERDICT_COLOR(l.verdict) }}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── DAY LABELS ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)",
+        padding:"8px 10px 4px" }}>
+        {DAY_LETTERS.map((d, i) => (
+          <div key={i} style={{ textAlign:"center", fontFamily:"'Unbounded',sans-serif",
+            fontSize:6.5, letterSpacing:"0.1em", color:theme.subtext }}>{d}</div>
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div style={{ padding: "0 4px" }}>
+      {/* ── PHOTO MOSAIC GRID ── */}
+      <div style={{ padding:"0 10px 16px" }}>
         {weeks.map((week, wi) => (
-          <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2 }}>
+          <div key={wi} style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)",
+            gap:3, marginBottom:3 }}>
             {week.map((day, di) => {
-              if (!day) return <div key={di} style={{ aspectRatio: "1" }}/>;
-              const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              if (!day) return <div key={di} style={{ aspectRatio:"1" }}/>;
+
+              const dateKey  = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
               const dayLogs  = logsByDate[dateKey] || [];
-              const isToday  = dateKey === todayKey;
-              const isSelected = selectedDay === day;
               const hasLogs  = dayLogs.length > 0;
               const topLog   = dayLogs[0];
+              const isToday  = dateKey === todayKey;
+
+              if (!hasLogs) {
+                return (
+                  <div key={di} style={{ aspectRatio:"1", borderRadius:6,
+                    background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.03)",
+                    border: isToday
+                      ? `1px solid ${theme.border2}`
+                      : `1px solid ${theme.border}`,
+                    display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7, fontWeight:700,
+                      color: isToday ? theme.subtext2 : theme.subtext, opacity: isToday ? 1 : 0.5 }}>
+                      {day}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div key={di}
-                  onClick={() => { if (!didLongPress.current) setSelectedDay(isSelected ? null : day); }}
+                  onClick={() => { if (!didLongPress.current) onLogTap(topLog); }}
                   onTouchStart={() => {
                     didLongPress.current = false;
-                    if (!hasLogs || !topLog?.artwork) return;
-                    pressTimer.current = setTimeout(() => { didLongPress.current = true; setLightboxImg(topLog.artwork); }, 450);
+                    if (!topLog?.artwork) return;
+                    pressTimer.current = setTimeout(() => {
+                      didLongPress.current = true;
+                      setLightboxImg(topLog.artwork);
+                    }, 450);
                   }}
                   onTouchEnd={() => clearTimeout(pressTimer.current)}
                   onTouchMove={() => clearTimeout(pressTimer.current)}
                   onMouseDown={() => {
                     didLongPress.current = false;
-                    if (!hasLogs || !topLog?.artwork) return;
-                    pressTimer.current = setTimeout(() => { didLongPress.current = true; setLightboxImg(topLog.artwork); }, 450);
+                    if (!topLog?.artwork) return;
+                    pressTimer.current = setTimeout(() => {
+                      didLongPress.current = true;
+                      setLightboxImg(topLog.artwork);
+                    }, 450);
                   }}
                   onMouseUp={() => clearTimeout(pressTimer.current)}
                   onMouseLeave={() => clearTimeout(pressTimer.current)}
-                  style={{
-                    position: "relative", aspectRatio: "1", borderRadius: 5,
-                    overflow: "hidden", cursor: hasLogs ? "pointer" : "default",
-                    WebkitUserSelect: "none", userSelect: "none",
-                    border: isSelected
-                      ? `2px solid ${theme.text}`
-                      : isToday
-                        ? `1px solid ${theme.border2}`
-                        : `1px solid ${theme.border}`,
-                    background: hasLogs ? "transparent" : (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"),
-                    boxSizing: "border-box", transition: "border-color 0.15s",
-                  }}>
+                  style={{ aspectRatio:"1", borderRadius:6, overflow:"hidden",
+                    position:"relative", cursor:"pointer",
+                    border:`1px solid ${VERDICT_COLOR(topLog.verdict)}33`,
+                    animation:`tileIn 0.35s cubic-bezier(0.16,1,0.3,1) ${(wi*7+di)*0.015}s both`,
+                    ...noSel }}>
 
-                  {/* Artwork fill */}
-                  {hasLogs && topLog && (
-                    <div style={{ position: "absolute", inset: 0 }}>
-                      <CalArt log={topLog}/>
-                      <div style={{ position: "absolute", inset: 0,
-                        background: "linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.6) 100%)" }}/>
-                    </div>
-                  )}
+                  {/* Full-bleed artwork */}
+                  <div style={{ position:"absolute", inset:0 }}>
+                    <CalArt log={topLog}/>
+                  </div>
 
-                  {/* Day number — always white when artwork present (dark overlay ensures legibility), else use theme */}
-                  <div style={{
-                    position: "absolute", top: 3, left: 0, right: 0, textAlign: "center",
-                    fontFamily: "'Unbounded',sans-serif", fontSize: 8, fontWeight: 700,
-                    color: hasLogs ? "rgba(255,255,255,0.95)" : theme.subtext,
-                    letterSpacing: "0.05em", zIndex: 2,
-                  }}>
+                  {/* Gradient for text legibility */}
+                  <div style={{ position:"absolute", inset:0,
+                    background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.75) 100%)",
+                    pointerEvents:"none" }}/>
+
+                  {/* Verdict colour strip — top */}
+                  <div style={{ position:"absolute", top:0, left:0, right:0, height:2,
+                    background:VERDICT_COLOR(topLog.verdict), zIndex:3, pointerEvents:"none" }}/>
+
+                  {/* Day number — top centre */}
+                  <div style={{ position:"absolute", top:3, left:0, right:0,
+                    textAlign:"center", fontFamily:"'Unbounded',sans-serif",
+                    fontSize:7.5, fontWeight:700, color:"rgba(255,255,255,0.9)",
+                    zIndex:3, pointerEvents:"none", letterSpacing:"0.04em" }}>
                     {day}
                   </div>
 
+                  {/* Title — bottom */}
+                  <div style={{ position:"absolute", bottom:3, left:3, right:3,
+                    fontFamily:"'DM Serif Display',serif", fontSize:8.5, lineHeight:1.15,
+                    color:"rgba(255,255,255,0.9)", zIndex:3, pointerEvents:"none",
+                    overflow:"hidden", display:"-webkit-box",
+                    WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                    {topLog.title}
+                  </div>
+
+                  {/* Verdict dot — top right */}
+                  <div style={{ position:"absolute", top:4, right:4,
+                    width:6, height:6, borderRadius:"50%",
+                    background:VERDICT_COLOR(topLog.verdict),
+                    boxShadow:`0 0 5px ${VERDICT_COLOR(topLog.verdict)}`,
+                    zIndex:3, pointerEvents:"none" }}/>
+
                   {/* Multi-entry badge */}
                   {dayLogs.length > 1 && (
-                    <div style={{
-                      position: "absolute", bottom: 3, right: 3,
-                      background: "rgba(0,0,0,0.75)", borderRadius: "50%",
-                      width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                      fontFamily: "'Unbounded',sans-serif", fontSize: 7,
-                      color: "rgba(255,255,255,0.9)", zIndex: 3,
-                      border: "1px solid rgba(255,255,255,0.25)",
-                    }}>
-                      {dayLogs.length}
+                    <div style={{ position:"absolute", bottom:3, right:3,
+                      background:"rgba(0,0,0,0.75)", borderRadius:10,
+                      padding:"1px 4px", zIndex:4, pointerEvents:"none",
+                      border:"1px solid rgba(255,255,255,0.2)",
+                      fontFamily:"'Unbounded',sans-serif", fontSize:5.5,
+                      color:"rgba(255,255,255,0.85)" }}>
+                      +{dayLogs.length - 1}
                     </div>
-                  )}
-
-                  {/* Verdict colour strip */}
-                  {hasLogs && (
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3,
-                      background: VERDICT_COLOR(topLog.verdict), zIndex: 3, opacity: 0.9 }}/>
                   )}
                 </div>
               );
@@ -305,80 +370,106 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
         ))}
       </div>
 
-      {/* Selected day panel */}
-      {selectedDay && (
-        <div style={{
-          margin: "12px 10px 0",
-          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)",
-          border: `1px solid ${theme.border}`,
-          borderRadius: 12, overflow: "hidden",
-        }}>
-          <div style={{ padding: "12px 14px 8px", borderBottom: `1px solid ${theme.border}` }}>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 17, color: theme.text }}>
-              {new Date(year, month, selectedDay).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+      {/* ── SCROLLABLE MONTH STRIP ── */}
+      {monthEntries.length > 0 && (
+        <div style={{ borderTop:`1px solid ${theme.border}`, paddingTop:14 }}>
+          <div style={{ padding:"0 16px 10px", display:"flex",
+            justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7,
+              letterSpacing:"0.18em", color:theme.subtext }}>
+              ALL ENTRIES
             </div>
-            <div style={{ fontFamily: "'Unbounded',sans-serif", fontSize: 7, color: theme.subtext,
-              letterSpacing: "0.12em", marginTop: 3 }}>
-              {selectedLogs.length === 0 ? "NOTHING LOGGED" : `${selectedLogs.length} ENTR${selectedLogs.length === 1 ? "Y" : "IES"}`}
-            </div>
+            <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7,
+              color:theme.subtext }}>{totalCount}</div>
           </div>
 
-          {selectedLogs.length === 0 ? (
-            <div style={{ padding: "20px 14px", textAlign: "center", color: theme.subtext,
-              fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontSize: 14 }}>
-              Nothing logged on this day
-            </div>
-          ) : (
-            <div style={{ padding: "0 14px" }}>
-              {selectedLogs.map(log => {
-                const vc = VERDICT_COLOR(log.verdict);
-                const ss = getSubtypeStyle(log.media_type);
-                return (
-                  <div key={log.id} onClick={() => onLogTap(log)}
-                    style={{ display: "flex", gap: 10, padding: "12px 0",
-                      borderBottom: `1px solid ${theme.border}`, cursor: "pointer" }}>
-                    <div style={{ width: 3, borderRadius: 2, background: vc, flexShrink: 0, alignSelf: "stretch" }}/>
-                    <MiniArt log={log} size={36}/>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Unbounded',sans-serif", fontSize: 6, color: theme.subtext,
-                        letterSpacing: "0.12em", marginBottom: 3 }}>
-                        {ss.icon} {log.media_type}
-                      </div>
-                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 14, color: theme.text,
-                        lineHeight: 1.2, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {log.title}
-                      </div>
-                      <div style={{ color: vc, fontFamily: "'Unbounded',sans-serif", fontSize: 7,
-                        fontWeight: 700, letterSpacing: "0.06em" }}>
+          <div style={{ display:"flex", gap:8, overflowX:"auto",
+            padding:"0 16px 16px", scrollSnapType:"x mandatory",
+            WebkitOverflowScrolling:"touch" }}>
+            {monthEntries.map((log, i) => {
+              const ss  = getSubtypeStyle(log.media_type);
+              const vc  = VERDICT_COLOR(log.verdict);
+              const d   = new Date(log.logged_at);
+              const day = d.getDate();
+              const { color1, color2 } = generateCoverGradient(log.title || "");
+
+              return (
+                <div key={log.id || i}
+                  onClick={() => onLogTap(log)}
+                  style={{ flexShrink:0, width:110, height:150, borderRadius:10,
+                    position:"relative", cursor:"pointer", overflow:"hidden",
+                    scrollSnapAlign:"start",
+                    background:`linear-gradient(145deg,${color1},${color2})`,
+                    border:`1px solid ${vc}22`,
+                    boxShadow:"0 4px 14px rgba(0,0,0,0.35)",
+                    transition:"transform 0.2s cubic-bezier(0.16,1,0.3,1)",
+                    ...noSel }}
+                  onMouseEnter={e => e.currentTarget.style.transform="scale(1.04)"}
+                  onMouseLeave={e => e.currentTarget.style.transform="scale(1)"}>
+
+                  {/* Artwork */}
+                  {log.artwork && (
+                    <img src={log.artwork} alt="" draggable={false}
+                      onContextMenu={e => e.preventDefault()}
+                      style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+                        objectFit:"cover", pointerEvents:"none" }}/>
+                  )}
+
+                  {/* Gradient */}
+                  <div style={{ position:"absolute", inset:0,
+                    background:"linear-gradient(to bottom,rgba(0,0,0,0) 30%,rgba(0,0,0,0.88) 100%)",
+                    pointerEvents:"none" }}/>
+
+                  {/* Verdict top stripe */}
+                  <div style={{ position:"absolute", top:0, left:0, right:0, height:3,
+                    background:vc, pointerEvents:"none" }}/>
+
+                  {/* Date badge */}
+                  <div style={{ position:"absolute", top:8, left:8,
+                    background:"rgba(0,0,0,0.6)", borderRadius:5, padding:"2px 6px",
+                    fontFamily:"'Unbounded',sans-serif", fontSize:6, fontWeight:700,
+                    color:"rgba(255,255,255,0.8)",
+                    border:"1px solid rgba(255,255,255,0.12)", pointerEvents:"none" }}>
+                    {day} {monthName.slice(0,3).toUpperCase()}
+                  </div>
+
+                  {/* Bottom content */}
+                  <div style={{ position:"absolute", bottom:0, left:0, right:0,
+                    padding:"0 8px 9px", pointerEvents:"none" }}>
+                    <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:5.5,
+                      letterSpacing:"0.1em", color:"rgba(255,255,255,0.35)", marginBottom:3 }}>
+                      {ss.icon} {log.media_type}
+                    </div>
+                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:12,
+                      lineHeight:1.2, color:"#fff",
+                      overflow:"hidden", display:"-webkit-box",
+                      WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                      {log.title}
+                    </div>
+                    <div style={{ marginTop:4, display:"flex", alignItems:"center", gap:4 }}>
+                      <div style={{ width:5, height:5, borderRadius:"50%",
+                        background:vc, boxShadow:`0 0 4px ${vc}` }}/>
+                      <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:5.5,
+                        color:vc, letterSpacing:"0.06em" }}>
                         {VERDICT_LABEL(log.verdict)}
-                      </div>
-                      {log.notes && (
-                        <div style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic",
-                          fontSize: 11, color: theme.subtext, lineHeight: 1.5, marginTop: 5,
-                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                          "{log.notes.split(/\s+/).slice(0,14).join(" ")}{log.notes.split(/\s+/).length > 14 ? "…" : ""}"
-                        </div>
-                      )}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Lightbox */}
+      {/* ── LIGHTBOX ── */}
       {lightboxImg && (
         <div onClick={() => setLightboxImg(null)}
-          style={{
-            position:"fixed", inset:0, zIndex:600,
+          style={{ position:"fixed", inset:0, zIndex:600,
             background:"rgba(0,0,0,0.92)",
             backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
             display:"flex", alignItems:"center", justifyContent:"center",
-            animation:"lbIn 0.18s ease",
-          }}>
-          <style>{`@keyframes lbIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}`}</style>
+            animation:"lbIn 0.18s ease" }}>
           <img src={lightboxImg} alt=""
             style={{ maxWidth:"95vw", maxHeight:"90vh", objectFit:"contain",
               borderRadius:8, boxShadow:"0 20px 80px rgba(0,0,0,0.8)", pointerEvents:"none" }}/>
@@ -519,6 +610,24 @@ const DetailSheet = ({ log, darkMode, theme, onClose, onEdit, onDelete }) => {
 export const JournalTab = ({ logs, theme, darkMode, onEdit, onDelete }) => {
   const [view, setView] = useState("calendar");
   const [selectedLog, setSelectedLog] = useState(null);
+
+  // Push history when detail sheet opens so Android back closes it
+  React.useEffect(() => {
+    if (selectedLog) {
+      window.history.pushState({ dili: "journal-detail" }, "");
+    }
+  }, [selectedLog?.id]);
+
+  React.useEffect(() => {
+    const onPop = () => {
+      if (selectedLog) {
+        setSelectedLog(null);
+        window.history.pushState({ dili: "sentinel" }, "");
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [selectedLog]);
 
   const byMonth = useMemo(() => {
     const map = {};
