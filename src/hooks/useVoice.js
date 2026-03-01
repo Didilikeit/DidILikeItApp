@@ -8,11 +8,26 @@ export const useVoice = () => {
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+    // Stop recording if the component unmounts while active
+    return () => {
+      if (recRef.current) {
+        recRef.current.onresult = null;
+        recRef.current.onend = null;
+        recRef.current.onerror = null;
+        try { recRef.current.stop(); } catch { /* already stopped */ }
+        recRef.current = null;
+      }
+    };
   }, []);
 
   const start = useCallback((onResult, onEnd) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+
+    // Stop any existing session before starting a new one
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch { /* already stopped */ }
+    }
 
     const rec = new SR();
     recRef.current = rec;
@@ -31,13 +46,19 @@ export const useVoice = () => {
       if (final) onResult(final);
     };
     rec.onend  = () => { setListening(false); setInterim(""); onEnd?.(); };
-    rec.onerror = () => { setListening(false); setInterim(""); };
+    rec.onerror = e => {
+      if (e.error !== "aborted") console.warn("SpeechRecognition error:", e.error);
+      setListening(false);
+      setInterim("");
+    };
     rec.start();
     setListening(true);
   }, []);
 
   const stop = useCallback(() => {
-    recRef.current?.stop();
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch { /* already stopped */ }
+    }
     setListening(false);
     setInterim("");
   }, []);

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TMDB_KEY, LAST_FM_KEY, GOOGLE_BOOKS_KEY, TMDB_GENRES, API_TYPES } from "../utils/constants.js";
 
 export const useApiSearch = (searchQuery, mediaType) => {
   const [searchResults, setSearchResults] = useState([]);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     const d = setTimeout(() => {
@@ -12,21 +13,34 @@ export const useApiSearch = (searchQuery, mediaType) => {
     return () => clearTimeout(d);
   }, [searchQuery, mediaType]);
 
+  // Cancel any in-flight request on unmount
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
   const runSearch = async q => {
     if (q.length < 3) { setSearchResults([]); return; }
     const at = API_TYPES[mediaType];
     if (!at) return;
+
+    // Cancel previous in-flight request
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     try {
       if (at === "tmdb_movie") {
-        const r = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`);
+        const r = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`, { signal });
+        if (!r.ok) throw new Error(`TMDB error ${r.status}`);
         setSearchResults((await r.json()).results?.slice(0, 6) || []);
       } else if (at === "tmdb_tv") {
-        const r = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`);
+        const r = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`, { signal });
+        if (!r.ok) throw new Error(`TMDB error ${r.status}`);
         setSearchResults((await r.json()).results?.slice(0, 6).map(x => ({ ...x, _tv: true })) || []);
       } else if (at === "books") {
         const [r1, r2] = await Promise.all([
-          fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&orderBy=relevance&printType=books&maxResults=10&langRestrict=en&key=${GOOGLE_BOOKS_KEY}`),
-          fetch(`https://www.googleapis.com/books/v1/volumes?q=inauthor:${encodeURIComponent(q)}&orderBy=relevance&printType=books&maxResults=10&langRestrict=en&key=${GOOGLE_BOOKS_KEY}`),
+          fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&orderBy=relevance&printType=books&maxResults=10&langRestrict=en&key=${GOOGLE_BOOKS_KEY}`, { signal }),
+          fetch(`https://www.googleapis.com/books/v1/volumes?q=inauthor:${encodeURIComponent(q)}&orderBy=relevance&printType=books&maxResults=10&langRestrict=en&key=${GOOGLE_BOOKS_KEY}`, { signal }),
         ]);
         const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
         const seen = new Set();
@@ -36,10 +50,15 @@ export const useApiSearch = (searchQuery, mediaType) => {
           return true;
         }).slice(0, 12));
       } else if (at === "lastfm") {
-        const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.search&album=${encodeURIComponent(q)}&api_key=${LAST_FM_KEY}&format=json`);
+        const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.search&album=${encodeURIComponent(q)}&api_key=${LAST_FM_KEY}&format=json`, { signal });
+        if (!r.ok) throw new Error(`Last.fm error ${r.status}`);
         setSearchResults((await r.json()).results?.albummatches?.album?.slice(0, 6) || []);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      if (e.name === "AbortError") return; // Ignore intentional cancellations
+      console.error("API search failed:", e);
+      setSearchResults([]);
+    }
   };
 
   const selectResult = async (item, mediaType, callbacks) => {

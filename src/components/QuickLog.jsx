@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useApiSearch } from "../hooks/useApiSearch.js";
 import { CATEGORIES, API_TYPES } from "../utils/constants.js";
 import { getSubtypeStyle } from "../utils/helpers.js";
+import { getVerdictStyle } from "../utils/theme.js";
 
 // Inject fonts
 if (!document.getElementById("quicklog-fonts")) {
@@ -12,12 +13,8 @@ if (!document.getElementById("quicklog-fonts")) {
   document.head.appendChild(l);
 }
 
-const VERDICTS = [
-  { v: "I loved it",       emoji: "⭐", color: "#f1c40f", bg: "rgba(241,196,15,0.12)",  border: "rgba(241,196,15,0.3)"  },
-  { v: "I liked it",       emoji: "🟢", color: "#4caf50", bg: "rgba(76,175,80,0.12)",   border: "rgba(76,175,80,0.3)"   },
-  { v: "Meh",              emoji: "🟡", color: "#ff9800", bg: "rgba(255,152,0,0.12)",   border: "rgba(255,152,0,0.3)"   },
-  { v: "I didn't like it", emoji: "🔴", color: "#e74c3c", bg: "rgba(231,76,60,0.12)",   border: "rgba(231,76,60,0.3)"   },
-];
+// Verdict options — derived from getVerdictStyle to stay in sync with the rest of the app.
+const VERDICT_KEYS = ["I loved it", "I liked it", "Meh", "I didn't like it"];
 
 // Flat list of all subtypes for quick picking
 const ALL_TYPES = Object.entries(CATEGORIES).flatMap(([cat, def]) =>
@@ -243,24 +240,27 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.subtext, marginBottom: 12 }}>Did you like it?</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {VERDICTS.map(({ v, emoji, color, bg, border }) => (
-                <button key={v} className="ql-verdict-btn"
-                  onClick={() => handleVerdictSelect(v)}
-                  disabled={saving}
-                  style={{
-                    padding: "16px 20px", borderRadius: 14,
-                    border: `1px solid ${border}`,
-                    background: bg,
-                    color, fontWeight: 700, fontSize: 15, cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 10,
-                    transition: "all 0.15s",
-                    opacity: saving ? 0.5 : 1,
-                    textAlign: "left",
-                  }}>
-                  <span style={{ fontSize: 20 }}>{emoji}</span>
-                  <span>{v}</span>
-                </button>
-              ))}
+              {VERDICT_KEYS.map(v => {
+                const vs = getVerdictStyle(v, darkMode);
+                return (
+                  <button key={v} className="ql-verdict-btn"
+                    onClick={() => handleVerdictSelect(v)}
+                    disabled={saving}
+                    style={{
+                      padding: "16px 20px", borderRadius: 14,
+                      border: `1px solid ${vs.border}`,
+                      background: vs.bg,
+                      color: vs.color, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: 10,
+                      transition: "all 0.15s",
+                      opacity: saving ? 0.5 : 1,
+                      textAlign: "left",
+                    }}>
+                    <span style={{ fontSize: 20 }}>{vs.emoji}</span>
+                    <span>{v}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

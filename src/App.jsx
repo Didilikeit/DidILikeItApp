@@ -24,6 +24,11 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [authMsg, setAuthMsg] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [appError, setAppError] = useState("");
 
   // ── Data ──
   const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink } = useLogs();
@@ -74,6 +79,7 @@ export default function App() {
   const [recommendedBy, setRecommendedBy] = useState(""); // name of person who recommended this
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const textareaRef = useRef(null);
 
   // ── Geocoding ──
@@ -137,19 +143,21 @@ export default function App() {
   const touchStartY = useRef(0);
   const PULL_THRESHOLD = 72;
 
-  const handleTouchStart = e => {
+  const handleTouchStart = useCallback(e => {
     if (scrollRef.current?.scrollTop === 0) touchStartY.current = e.touches[0].clientY;
     else touchStartY.current = 0;
-  };
-  const handleTouchMove = e => {
+  }, []);
+
+  const handleTouchMove = useCallback(e => {
     if (!touchStartY.current || refreshing) return;
     const dy = e.touches[0].clientY - touchStartY.current;
     if (dy > 0 && scrollRef.current?.scrollTop === 0) {
       setPulling(true);
       setPullDist(Math.min(dy * 0.45, PULL_THRESHOLD + 20));
     }
-  };
-  const handleTouchEnd = async () => {
+  }, [refreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
     if (pulling && pullDist >= PULL_THRESHOLD) {
       setRefreshing(true);
       setPullDist(PULL_THRESHOLD);
@@ -176,7 +184,7 @@ export default function App() {
       setPulling(false); setPullDist(0);
     }
     touchStartY.current = 0;
-  };
+  }, [pulling, pullDist, fetchLogs, user]);
 
   // Persist settings
   useEffect(() => { document.body.style.backgroundColor = theme.bg; }, [theme.bg]);
@@ -425,44 +433,44 @@ export default function App() {
   };
 
   const handleAuth = async e => {
-    e.preventDefault(); setAuthMsg("");
-    const email = e.target.email.value, password = e.target.password.value;
+    e.preventDefault();
+    setAuthMsg(""); setAuthError("");
     if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
+      const { data, error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
       else if (data?.user && !data?.session) setAuthMsg("Check your email to verify!");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
     }
   };
 
   const handleForgotPassword = async () => {
-    const email = prompt("Enter your email:");
-    if (!email) return;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-    if (error) alert(error.message); else alert("Reset email sent!");
+    if (!forgotPasswordMode) { setForgotPasswordMode(true); setAuthError(""); return; }
+    if (!authEmail.trim()) { setAuthError("Enter your email above first."); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(authEmail.trim(), { redirectTo: window.location.origin });
+    if (error) setAuthError(error.message);
+    else { setAuthMsg("Password reset email sent!"); setForgotPasswordMode(false); }
   };
 
   const handleDeleteAccount = async () => {
     if (!window.confirm("WARNING: This permanently deletes your account and ALL logs. Proceed?")) return;
     if (user) {
       const { error } = await supabase.rpc("delete_user_account");
-      if (error) alert("Error: " + error.message);
-      else { await supabase.auth.signOut(); alert("Account deleted."); window.location.reload(); }
+      if (error) setAppError("Could not delete account: " + error.message);
+      else { await supabase.auth.signOut(); window.location.reload(); }
     } else {
       localStorage.removeItem("guest_logs");
       fetchLogs(null);
-      alert("Guest data cleared.");
     }
   };
 
   const handleSave = async () => {
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || !verdict) return alert("Title and Verdict are required.");
+    if (!trimmedTitle || !verdict) { setFormError("Title and Verdict are required."); return; }
     const yearStr = year ? year.toString() : "";
-    if (yearStr && (yearStr.length !== 4 || isNaN(yearStr))) return alert("Please enter a valid 4-digit year.");
-    setIsSaving(true);
+    if (yearStr && (yearStr.length !== 4 || isNaN(yearStr))) { setFormError("Please enter a valid 4-digit year."); return; }
+    setFormError(""); setIsSaving(true);
     const logData = {
       title: trimmedTitle, creator: creator.trim(), notes: notes.trim(),
       media_type: mediaType, verdict,
@@ -478,18 +486,11 @@ export default function App() {
       recommended_by: recommendedBy.trim() || null,
     };
     try {
-      await saveLog({ logData, editingId, user, verdict });
       const sid = editingId;
-      // Handle inspired-by link
+      const savedId = await saveLog({ logData, editingId, user, verdict });
+      // Handle inspired-by link using the returned ID — no setTimeout race condition
       if (!editingId) {
-        // New entry: create link if inspired by something
-        if (inspiredBy) {
-          const sourceId = inspiredBy;
-          setTimeout(() => {
-            const newEntry = logs[0];
-            if (newEntry && sourceId) addLink(sourceId, newEntry.id);
-          }, 300);
-        }
+        if (inspiredBy && savedId) addLink(inspiredBy, savedId);
       } else {
         // Editing: remove old incoming link and add new one if changed
         const oldLink = links.find(lk => lk.b === editingId);
@@ -499,8 +500,8 @@ export default function App() {
       resetForm();
       const isQ = verdict === "Want to go" || verdict?.startsWith("Want to") || verdict?.startsWith("Currently");
       setActiveTab(isQ ? "queue" : "history");
-      setSavedEntryId(sid || "latest");
-    } catch (err) { alert(err.message); }
+      setSavedEntryId(sid || savedId || "latest");
+    } catch (err) { setFormError(err.message); }
     finally { setIsSaving(false); }
   };
 
@@ -533,11 +534,20 @@ export default function App() {
     undoTimerRef.current = setTimeout(() => setUndoItem(null), 5000);
   };
 
-  const undoDelete = () => {
+  const undoDelete = async () => {
     if (!undoItem) return;
     clearTimeout(undoTimerRef.current);
-    // Re-insert locally — next fetch will sync properly
-    fetchLogs(user);
+    // Re-insert the deleted item — saveLog returns its new ID.
+    // Strip the old DB id/user_id so Supabase assigns a fresh row.
+    const { id: _id, user_id: _uid, ...rest } = undoItem;
+    try {
+      await saveLog({
+        logData: { ...rest, manualDate: undoItem.logged_at?.split("T")[0] },
+        editingId: null,
+        user,
+        verdict: undoItem.verdict,
+      });
+    } catch (e) { console.error("Undo failed:", e); }
     setUndoItem(null);
   };
 
@@ -597,12 +607,18 @@ export default function App() {
     else setCollections(prev => [...prev, { id: Date.now().toString(), name: collName.trim(), emoji: collEmoji, desc: collDesc.trim(), createdAt: new Date().toISOString() }]);
     setShowCollModal(false); setCollName(""); setCollEmoji("🗂"); setCollDesc(""); setEditingColl(null);
   };
-  const deleteCollection = id => {
+  const deleteCollection = async id => {
     if (!window.confirm("Delete this collection? Entries stay but lose their collection tag.")) return;
     setCollections(prev => prev.filter(c => c.id !== id));
-    const cur = JSON.parse(localStorage.getItem("guest_logs") || "[]");
-    localStorage.setItem("guest_logs", JSON.stringify(cur.map(l => l.collection_id === id ? { ...l, collection_id: null } : l)));
-    fetchLogs(user);
+    if (user) {
+      // Clear collection_id for all affected rows in Supabase
+      await supabase.from("logs").update({ collection_id: null }).eq("collection_id", id);
+      await fetchLogs(user);
+    } else {
+      const cur = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+      localStorage.setItem("guest_logs", JSON.stringify(cur.map(l => l.collection_id === id ? { ...l, collection_id: null } : l)));
+      fetchLogs(null);
+    }
   };
   const openEditColl = c => { setEditingColl(c.id); setCollName(c.name); setCollEmoji(c.emoji || "🗂"); setCollDesc(c.desc || ""); setShowCollModal(true); };
   const saveName = () => { localStorage.setItem("user_custom_name", customName.trim()); setIsEditingName(false); };
@@ -1176,6 +1192,11 @@ export default function App() {
           </div>
         </div>
 
+        {formError && (
+          <div style={{ padding:"10px 12px", background:"rgba(231,76,60,0.12)", color:"#e74c3c", border:"1px solid rgba(231,76,60,0.25)", borderRadius:"10px", fontSize:"13px", marginBottom:"8px" }}>
+            {formError}
+          </div>
+        )}
         <button onClick={handleSave} disabled={isSaving} style={{ width:"100%", padding:"14px", borderRadius:"12px", border:"none", background:darkMode?"#fff":"#111", color:darkMode?"#000":"#fff", fontWeight:"700", fontSize:"15px", cursor:"pointer", opacity:isSaving?0.6:1 }}>
           {isSaving ? "Saving…" : (editingId ? "Update entry" : "Save entry")}
         </button>
@@ -1630,16 +1651,32 @@ export default function App() {
           <div style={{ background:theme.card, padding:"28px", borderRadius:"20px", width:"100%", maxWidth:"340px", border:`1px solid ${theme.border2}` }}>
             <h3 style={{ textAlign:"center", marginBottom:"8px", fontSize:"18px", fontWeight:"700" }}>{isSignUp ? "Create account" : "Welcome back"}</h3>
             {authMsg && <div style={{ padding:"10px", background:"#27ae60", color:"#fff", borderRadius:"8px", fontSize:"12px", marginBottom:"14px", textAlign:"center" }}>{authMsg}</div>}
+            {authError && <div style={{ padding:"10px", background:"rgba(231,76,60,0.15)", color:"#e74c3c", border:"1px solid rgba(231,76,60,0.3)", borderRadius:"8px", fontSize:"12px", marginBottom:"14px", textAlign:"center" }}>{authError}</div>}
             <p style={{ fontSize:"11px", textAlign:"center", color:theme.subtext, marginBottom:"18px" }}>{logs.length>0&&!user ? "Your guest entries will sync on login." : "Access your logs anywhere."}</p>
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider:"google" })} style={{ width:"100%", padding:"12px", borderRadius:"10px", border:"none", background:"#fff", color:"#000", fontWeight:"600", cursor:"pointer", marginBottom:"16px", fontSize:"14px" }}>Continue with Google</button>
+            {!forgotPasswordMode && <button onClick={() => supabase.auth.signInWithOAuth({ provider:"google" })} style={{ width:"100%", padding:"12px", borderRadius:"10px", border:"none", background:"#fff", color:"#000", fontWeight:"600", cursor:"pointer", marginBottom:"16px", fontSize:"14px" }}>Continue with Google</button>}
             <form onSubmit={handleAuth}>
-              <input name="email" type="email" placeholder="Email" required style={inputStyle}/>
-              <input name="password" type="password" placeholder="Password" required style={inputStyle}/>
-              <button type="submit" style={{ width:"100%", padding:"12px", borderRadius:"10px", border:"none", background:"#3498db", color:"#fff", fontWeight:"600", cursor:"pointer", fontSize:"14px" }}>{isSignUp ? "Sign up" : "Login"}</button>
+              <input
+                type="email" placeholder="Email" required
+                value={authEmail} onChange={e => setAuthEmail(e.target.value)}
+                style={inputStyle}
+              />
+              {!forgotPasswordMode && (
+                <input
+                  type="password" placeholder="Password" required
+                  value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+                  style={inputStyle}
+                />
+              )}
+              {!forgotPasswordMode && <button type="submit" style={{ width:"100%", padding:"12px", borderRadius:"10px", border:"none", background:"#3498db", color:"#fff", fontWeight:"600", cursor:"pointer", fontSize:"14px" }}>{isSignUp ? "Sign up" : "Login"}</button>}
             </form>
-            {!isSignUp && <button onClick={handleForgotPassword} style={{ background:"none", border:"none", color:"#3498db", cursor:"pointer", fontSize:"12px", display:"block", margin:"10px auto 0", fontWeight:"600" }}>Forgot password?</button>}
-            <button onClick={() => { setIsSignUp(v=>!v); setAuthMsg(""); }} style={{ background:"none", border:"none", color:"#3498db", cursor:"pointer", fontSize:"12px", display:"block", margin:"12px auto 0", fontWeight:"600" }}>{isSignUp ? "Already have an account? Login" : "Need an account? Sign up"}</button>
-            <button onClick={() => setShowAuthModal(false)} style={{ background:"none", border:"none", color:theme.subtext, cursor:"pointer", fontSize:"12px", display:"block", margin:"12px auto 0" }}>Close</button>
+            {!isSignUp && (
+              <button onClick={handleForgotPassword} style={{ background:"none", border:"none", color:"#3498db", cursor:"pointer", fontSize:"12px", display:"block", margin:"10px auto 0", fontWeight:"600" }}>
+                {forgotPasswordMode ? "Send reset email →" : "Forgot password?"}
+              </button>
+            )}
+            {forgotPasswordMode && <button onClick={() => { setForgotPasswordMode(false); setAuthError(""); }} style={{ background:"none", border:"none", color:theme.subtext, cursor:"pointer", fontSize:"12px", display:"block", margin:"8px auto 0" }}>← Back to login</button>}
+            {!forgotPasswordMode && <button onClick={() => { setIsSignUp(v=>!v); setAuthMsg(""); setAuthError(""); }} style={{ background:"none", border:"none", color:"#3498db", cursor:"pointer", fontSize:"12px", display:"block", margin:"12px auto 0", fontWeight:"600" }}>{isSignUp ? "Already have an account? Login" : "Need an account? Sign up"}</button>}
+            <button onClick={() => { setShowAuthModal(false); setForgotPasswordMode(false); setAuthError(""); }} style={{ background:"none", border:"none", color:theme.subtext, cursor:"pointer", fontSize:"12px", display:"block", margin:"12px auto 0" }}>Close</button>
           </div>
         </div>
       )}
@@ -1706,6 +1743,14 @@ export default function App() {
         <div style={{ position:"fixed", bottom:"80px", left:"50%", transform:"translateX(-50%)", background:darkMode?"#1a1a1a":"#222", color:"#fff", padding:"12px 16px", borderRadius:"14px", display:"flex", alignItems:"center", gap:"12px", zIndex:150, boxShadow:"0 4px 20px rgba(0,0,0,0.4)", fontSize:"13px", fontWeight:"500", whiteSpace:"nowrap" }}>
           <span>Deleted <b>{undoItem.title}</b></span>
           <button onClick={undoDelete} style={{ background:"#3498db", border:"none", color:"#fff", padding:"5px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontWeight:"700" }}>Undo</button>
+        </div>
+      )}
+
+      {/* ── APP ERROR TOAST ── */}
+      {appError && (
+        <div style={{ position:"fixed", bottom:"80px", left:"50%", transform:"translateX(-50%)", background:"#c0392b", color:"#fff", padding:"12px 16px", borderRadius:"14px", display:"flex", alignItems:"center", gap:"12px", zIndex:150, boxShadow:"0 4px 20px rgba(0,0,0,0.4)", fontSize:"13px", fontWeight:"500", maxWidth:"90vw" }}>
+          <span>{appError}</span>
+          <button onClick={() => setAppError("")} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:"#fff", padding:"4px 10px", borderRadius:"6px", cursor:"pointer", fontSize:"12px", fontWeight:"700" }}>✕</button>
         </div>
       )}
     </div>

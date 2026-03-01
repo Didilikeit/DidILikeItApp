@@ -18,12 +18,16 @@ export const VERDICT_MAP_COLOR = v => ({
   "Want to go":"#9b59b6",
 }[v] || "#888");
 
-// ─── COLLECTIONS ──────────────────────────────────────────────────────────────
-export const collAccent = name => {
+// ─── SHARED STRING HASH ───────────────────────────────────────────────────────
+// djb2-style hash used by both collAccent and generateCoverGradient.
+const strHash = str => {
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
-  return COLL_COLORS[Math.abs(h) % COLL_COLORS.length];
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return h;
 };
+
+// ─── COLLECTIONS ──────────────────────────────────────────────────────────────
+export const collAccent = name => COLL_COLORS[Math.abs(strHash(name)) % COLL_COLORS.length];
 
 // ─── SEARCH HIGHLIGHT ─────────────────────────────────────────────────────────
 export const hl = (content, term) => {
@@ -42,8 +46,7 @@ export const hl = (content, term) => {
 
 // ─── COVER GRADIENT (for books without artwork) ───────────────────────────────
 export const generateCoverGradient = title => {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  const hash = strHash(title);
   const h1 = Math.abs(hash) % 360;
   const h2 = (h1 + 40 + (Math.abs(hash >> 8) % 80)) % 360;
   return { color1: `hsl(${h1},50%,35%)`, color2: `hsl(${h2},60%,20%)` };
@@ -51,10 +54,12 @@ export const generateCoverGradient = title => {
 
 // ─── IMAGE COMPRESSION ────────────────────────────────────────────────────────
 export const compressImage = (file, maxWidth = 800, quality = 0.72) =>
-  new Promise(resolve => {
+  new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read image file"));
     reader.onload = e => {
       const img = new Image();
+      img.onerror = () => reject(new Error("Failed to decode image"));
       img.onload = () => {
         const canvas = document.createElement("canvas");
         let w = img.width, h = img.height;
@@ -142,10 +147,15 @@ export const getInsight = (logs, customName) => {
   const topGenre = Object.entries(genreCounts).sort((a,b) => b[1]-a[1])[0];
 
   // Streak: consecutive weeks with at least one log
-  const getWeek = d => { const t = new Date(d); t.setHours(0,0,0,0); t.setDate(t.getDate() - t.getDay()); return t.getTime(); };
-  const weeks = [...new Set(finished.map(l => getWeek(l.logged_at)))].sort((a,b) => b-a);
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const getWeekStart = d => {
+    const t = new Date(d);
+    t.setHours(0, 0, 0, 0);
+    t.setDate(t.getDate() - t.getDay());
+    return t.getTime();
+  };
+  const weeks = [...new Set(finished.map(l => getWeekStart(l.logged_at)))].sort((a,b) => b-a);
   let streak = 0;
-  const msPerWeek = 7*24*60*60*1000;
   for (let i = 0; i < weeks.length; i++) {
     if (i === 0) { streak = 1; continue; }
     if (weeks[i-1] - weeks[i] === msPerWeek) streak++;
@@ -164,7 +174,7 @@ export const getInsight = (logs, customName) => {
 
   // Books vs films comparison
   const books = finished.filter(l => l.media_type === "Book");
-  const films = finished.filter(l => l.media_type === "Movie" || l.media_type === "Film");
+  const films = finished.filter(l => l.media_type === "Movie");
 
   const insights = [];
 
