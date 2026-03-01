@@ -170,7 +170,7 @@ const NotesSlide = ({ log, theme, darkMode, onClose, onExpand, onNotesUpdate }) 
 const DotsMenu = ({ log, onEdit, onDelete, onClose, darkMode }) => (
   <div onClick={e => e.stopPropagation()} style={{ position:"absolute", top:32, right:10, zIndex:30, background:darkMode?"#1a1a14":"#fff", border:"1px solid rgba(255,180,60,0.15)", borderRadius:"10px", overflow:"hidden", minWidth:"140px", boxShadow:"0 8px 32px rgba(0,0,0,0.6)", animation:"bedsideFadeIn 0.15s ease" }}>
     <button onClick={() => { onEdit(); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid rgba(255,180,60,0.08)", color:darkMode?"rgba(245,232,200,0.8)":"#222", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left" }}>✏️ Edit entry</button>
-    <button onClick={() => { if(window.confirm(`Delete "${log.title}"?`)){onDelete();onClose();} }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", color:"#e74c3c", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left" }}>🗑 Delete</button>
+    <button onClick={() => { onDelete(); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", color:"#e74c3c", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left" }}>🗑 Delete</button>
     <button onClick={onClose} style={{ width:"100%", padding:"9px 14px", background:"none", border:"none", borderTop:"1px solid rgba(255,180,60,0.06)", color:"#555", fontSize:"11px", cursor:"pointer", textAlign:"left" }}>Cancel</button>
   </div>
 );

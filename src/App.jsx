@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { supabase } from "./utils/supabase.js";
 import { CATEGORIES, COLL_EMOJIS, API_TYPES, CREATOR_LABELS, PROGRESS_CONFIG } from "./utils/constants.js";
 import { buildTheme, getVerdictStyle } from "./utils/theme.js";
-import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight } from "./utils/helpers.js";
+import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight, formatMonthYear } from "./utils/helpers.js";
 import { useLogs } from "./hooks/useLogs.js";
+import { useCollections } from "./hooks/useCollections.js";
 import { useApiSearch } from "./hooks/useApiSearch.js";
+import { useDialogs } from "./components/Dialogs.jsx";
 import { EditorialFeed } from "./components/EditorialCard.jsx";
 import { GridFeed, ViewToggle } from "./components/GridFeed.jsx";
 import { TasteGenome, TasteRadar, TasteOracle } from "./components/TasteIntelligence.jsx";
@@ -26,12 +28,10 @@ export default function App() {
   const [authMsg, setAuthMsg] = useState("");
 
   // ── Data ──
-  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink } = useLogs();
+  const { logs, fetchLogs, mergeGuestLogs, saveLog, removeFromUI, commitDelete, updateNotes, links, addLink, removeLink } = useLogs();
+  const { collections, fetchCollections, mergeGuestCollections, saveCollection: saveCollectionFn, deleteCollection: deleteCollectionFn } = useCollections();
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [lastQuickLogEntry, setLastQuickLogEntry] = useState(null);
-  const [collections, setCollections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("dili_collections") || "[]"); } catch { return []; }
-  });
 
   // ── UI State ──
   const [activeTab, setActiveTab] = useState("home");
@@ -102,9 +102,13 @@ export default function App() {
   const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
   const [isEditingName, setIsEditingName] = useState(false);
 
+  // ── Dialogs (toast / confirm / prompt) ──
+  const { toast, confirm, prompt, DialogLayer } = useDialogs();
+
   // ── Undo ──
   const [undoItem, setUndoItem] = useState(null);
   const undoTimerRef = useRef(null);
+  const pendingDeleteId = useRef(null);
   const [savedEntryId, setSavedEntryId] = useState(null);
   const savedEntryRef = useRef(null);
   const [preEditTab, setPreEditTab] = useState(null);   // tab to return to on cancel
@@ -181,7 +185,6 @@ export default function App() {
   // Persist settings
   useEffect(() => { document.body.style.backgroundColor = theme.bg; }, [theme.bg]);
   useEffect(() => { localStorage.setItem("dark_mode", darkMode); }, [darkMode]);
-  useEffect(() => { localStorage.setItem("dili_collections", JSON.stringify(collections)); }, [collections]);
 
   // Auto-grow textarea
   useEffect(() => {
@@ -296,7 +299,7 @@ export default function App() {
         const { data: { session } } = await supabase.auth.getSession();
         const u = session?.user ?? null;
         setUser(u);
-        await fetchLogs(u);
+        await Promise.all([fetchLogs(u), fetchCollections(u)]);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -305,17 +308,36 @@ export default function App() {
       const u = session?.user ?? null;
       setUser(u);
       if (event === "PASSWORD_RECOVERY") {
-        const pw = prompt("Enter your new password:");
+        const pw = await prompt("Enter your new password:", { type: "password", placeholder: "New password…" });
         if (pw) {
           const { error } = await supabase.auth.updateUser({ password: pw });
-          if (error) alert(error.message); else alert("Password updated!");
+          if (error) toast(error.message, "error"); else toast("Password updated!", "success");
         }
       }
-      if (u) { setShowAuthModal(false); setAuthMsg(""); await mergeGuestLogs(u.id); }
-      else fetchLogs(null);
+      if (u) {
+        setShowAuthModal(false); setAuthMsg("");
+        // Migrate guest collections first so we can remap collection_ids in guest logs
+        const collIdMap = await mergeGuestCollections(u.id);
+        if (Object.keys(collIdMap).length > 0) {
+          try {
+            const guestLogs = JSON.parse(localStorage.getItem("guest_logs") || "[]");
+            localStorage.setItem("guest_logs", JSON.stringify(
+              guestLogs.map(l => ({
+                ...l,
+                collection_id: l.collection_id ? (collIdMap[l.collection_id] ?? l.collection_id) : l.collection_id,
+              }))
+            ));
+          } catch { /* ignore */ }
+        }
+        await mergeGuestLogs(u.id);
+        await fetchCollections(u);
+      } else {
+        fetchLogs(null);
+        fetchCollections(null);
+      }
     });
     return () => subscription.unsubscribe();
-  }, [fetchLogs, mergeGuestLogs]);
+  }, [fetchLogs, fetchCollections, mergeGuestLogs, mergeGuestCollections]);
 
   // ── Derived data ──
   const globalResults = useMemo(() => {
@@ -372,8 +394,9 @@ export default function App() {
     return cats;
   }, [logs, statYearFilter]);
 
+  // Use formatMonthYear (fixed "en-US" locale) so filter keys match across browsers
   const dateOptions = useMemo(() =>
-    ["All", ...new Set(logs.map(l => new Date(l.logged_at).toLocaleString("default", { month: "long", year: "numeric" })))],
+    ["All", ...new Set(logs.map(l => l.logged_at ? formatMonthYear(l.logged_at) : null).filter(Boolean))],
     [logs]
   );
 
@@ -415,39 +438,44 @@ export default function App() {
     const email = e.target.email.value, password = e.target.password.value;
     if (isSignUp) {
       const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
+      if (error) toast(error.message, "error");
       else if (data?.user && !data?.session) setAuthMsg("Check your email to verify!");
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+      if (error) toast(error.message, "error");
     }
   };
 
   const handleForgotPassword = async () => {
-    const email = prompt("Enter your email:");
+    const email = await prompt("Enter your email address:", { placeholder: "you@example.com" });
     if (!email) return;
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-    if (error) alert(error.message); else alert("Reset email sent!");
+    if (error) toast(error.message, "error");
+    else toast("Reset email sent! Check your inbox.", "success");
   };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm("WARNING: This permanently deletes your account and ALL logs. Proceed?")) return;
+    const ok = await confirm(
+      "WARNING: This permanently deletes your account and ALL your logs. This cannot be undone.",
+      { danger: true, confirmLabel: "Delete permanently" }
+    );
+    if (!ok) return;
     if (user) {
       const { error } = await supabase.rpc("delete_user_account");
-      if (error) alert("Error: " + error.message);
-      else { await supabase.auth.signOut(); alert("Account deleted."); window.location.reload(); }
+      if (error) toast("Error: " + error.message, "error");
+      else { await supabase.auth.signOut(); toast("Account deleted."); window.location.reload(); }
     } else {
       localStorage.removeItem("guest_logs");
       fetchLogs(null);
-      alert("Guest data cleared.");
+      toast("Guest data cleared.", "success");
     }
   };
 
   const handleSave = async () => {
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || !verdict) return alert("Title and Verdict are required.");
+    if (!trimmedTitle || !verdict) return toast("Title and Verdict are required.", "error");
     const yearStr = year ? year.toString() : "";
-    if (yearStr && (yearStr.length !== 4 || isNaN(yearStr))) return alert("Please enter a valid 4-digit year.");
+    if (yearStr && (yearStr.length !== 4 || isNaN(yearStr))) return toast("Please enter a valid 4-digit year.", "error");
     setIsSaving(true);
     const logData = {
       title: trimmedTitle, creator: creator.trim(), notes: notes.trim(),
@@ -464,29 +492,23 @@ export default function App() {
       recommended_by: recommendedBy.trim() || null,
     };
     try {
-      await saveLog({ logData, editingId, user, verdict });
-      const sid = editingId;
-      // Handle inspired-by link
+      // saveLog returns the entry ID — use it directly to avoid setTimeout race conditions
+      const savedId = await saveLog({ logData, editingId, user, verdict });
       if (!editingId) {
-        // New entry: create link if inspired by something
-        if (inspiredBy) {
-          const sourceId = inspiredBy;
-          setTimeout(() => {
-            const newEntry = logs[0];
-            if (newEntry && sourceId) addLink(sourceId, newEntry.id);
-          }, 300);
-        }
+        // New entry: create inspired-by link using the actual returned ID
+        if (inspiredBy && savedId) addLink(inspiredBy, savedId, user);
       } else {
         // Editing: remove old incoming link and add new one if changed
         const oldLink = links.find(lk => lk.b === editingId);
-        if (oldLink) removeLink(oldLink.a, editingId);
-        if (inspiredBy) addLink(inspiredBy, editingId);
+        if (oldLink) removeLink(oldLink.a, editingId, user);
+        if (inspiredBy) addLink(inspiredBy, editingId, user);
       }
+      const sid = editingId;
       resetForm();
       const isQ = verdict === "Want to go" || verdict?.startsWith("Want to") || verdict?.startsWith("Currently");
       setActiveTab(isQ ? "queue" : "history");
       setSavedEntryId(sid || "latest");
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast(err.message, "error"); }
     finally { setIsSaving(false); }
   };
 
@@ -512,17 +534,34 @@ export default function App() {
   const handleDelete = id => {
     const item = logs.find(l => l.id === id);
     if (!item) return;
-    // Optimistic UI — remove immediately, allow undo
-    deleteLog(id, user);
+    // If there's already a pending delete (from a previous delete within the undo window),
+    // commit it now before starting the new one.
+    if (pendingDeleteId.current) {
+      commitDelete(pendingDeleteId.current, user).catch(() => {});
+    }
+    // Optimistic UI — remove from state immediately (item stays in DB until undo window expires)
+    removeFromUI(id);
     setUndoItem(item);
+    pendingDeleteId.current = id;
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setUndoItem(null), 5000);
+    undoTimerRef.current = setTimeout(async () => {
+      pendingDeleteId.current = null;
+      setUndoItem(null);
+      try {
+        await commitDelete(id, user);
+      } catch (err) {
+        // DB delete failed after window expired — refetch to restore state
+        toast("Couldn't delete entry: " + err.message, "error");
+        fetchLogs(user);
+      }
+    }, 5000);
   };
 
   const undoDelete = () => {
     if (!undoItem) return;
     clearTimeout(undoTimerRef.current);
-    // Re-insert locally — next fetch will sync properly
+    pendingDeleteId.current = null;
+    // Item was never deleted from DB — just refetch to restore it in the UI
     fetchLogs(user);
     setUndoItem(null);
   };
@@ -577,18 +616,25 @@ export default function App() {
   };
 
   // Collection actions
-  const saveCollection = () => {
+  const saveCollection = async () => {
     if (!collName.trim()) return;
-    if (editingColl) setCollections(prev => prev.map(c => c.id === editingColl ? { ...c, name: collName.trim(), emoji: collEmoji, desc: collDesc.trim() } : c));
-    else setCollections(prev => [...prev, { id: Date.now().toString(), name: collName.trim(), emoji: collEmoji, desc: collDesc.trim(), createdAt: new Date().toISOString() }]);
-    setShowCollModal(false); setCollName(""); setCollEmoji("🗂"); setCollDesc(""); setEditingColl(null);
+    try {
+      await saveCollectionFn({ name: collName, emoji: collEmoji, desc: collDesc, editingId: editingColl, user });
+      setShowCollModal(false); setCollName(""); setCollEmoji("🗂"); setCollDesc(""); setEditingColl(null);
+    } catch (err) { toast(err.message, "error"); }
   };
-  const deleteCollection = id => {
-    if (!window.confirm("Delete this collection? Entries stay but lose their collection tag.")) return;
-    setCollections(prev => prev.filter(c => c.id !== id));
-    const cur = JSON.parse(localStorage.getItem("guest_logs") || "[]");
-    localStorage.setItem("guest_logs", JSON.stringify(cur.map(l => l.collection_id === id ? { ...l, collection_id: null } : l)));
-    fetchLogs(user);
+  const deleteCollection = async id => {
+    const coll = collections.find(c => c.id === id);
+    const ok = await confirm(
+      `Delete "${coll?.name}"? Entries stay but lose their collection tag.`,
+      { danger: true, confirmLabel: "Delete" }
+    );
+    if (!ok) return;
+    try {
+      await deleteCollectionFn(id, user);
+      // Refresh logs so any collection_id references are cleared in UI
+      fetchLogs(user);
+    } catch (err) { toast(err.message, "error"); }
   };
   const openEditColl = c => { setEditingColl(c.id); setCollName(c.name); setCollEmoji(c.emoji || "🗂"); setCollDesc(c.desc || ""); setShowCollModal(true); };
   const saveName = () => { localStorage.setItem("user_custom_name", customName.trim()); setIsEditingName(false); };
@@ -655,14 +701,14 @@ export default function App() {
     logs.forEach(l => {
       if (!l.logged_at) return;
       if (statYearFilter !== "All" && new Date(l.logged_at).getFullYear().toString() !== statYearFilter) return;
-      const k = new Date(l.logged_at).toLocaleString("default", { month:"long", year:"numeric" });
+      const k = formatMonthYear(l.logged_at);
       monthCount[k] = (monthCount[k] || 0) + 1;
     });
     const topMonth = Object.entries(monthCount).sort((a,b)=>b[1]-a[1])[0];
     const maxMonth = topMonth?.[1] || 1;
     const last12 = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(); d.setMonth(d.getMonth() - (11 - i));
-      const k = d.toLocaleString("default", { month:"long", year:"numeric" });
+      const k = formatMonthYear(d);
       return { key: k, label: d.toLocaleString("default", { month:"short" })[0], count: monthCount[k] || 0 };
     });
     const card = { background:theme.card, border:`1px solid ${theme.border}`, borderRadius:"16px", padding:"16px" };
@@ -969,7 +1015,7 @@ export default function App() {
             <div style={{ display:"flex", gap:"8px" }}>
               <input placeholder="Paste image URL…" value={artwork} onChange={e => setArtwork(e.target.value)} style={{ ...inputStyle, flex:1, marginBottom:0 }}/>
               <label style={{ flexShrink:0, padding:"0 14px", height:"44px", borderRadius:"10px", border:`1px solid ${theme.border2}`, background:"none", color:theme.subtext, fontSize:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                📷<input type="file" accept="image/*" style={{ display:"none" }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const c = await compressImage(f); setArtwork(c); }}/>
+                📷<input type="file" accept="image/*" style={{ display:"none" }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; try { const c = await compressImage(f); setArtwork(c); } catch (err) { toast(err.message, "error"); } }}/>
               </label>
             </div>
             {artwork && (
@@ -1092,9 +1138,10 @@ export default function App() {
             },
           ];
 
-          const applyTemplate = (tpl) => {
+          const applyTemplate = async (tpl) => {
             if (notes && notes.trim()) {
-              if (!window.confirm("Replace your current notes with this template?")) return;
+              const ok = await confirm("Replace your current notes with this template?");
+              if (!ok) return;
             }
             setNotes(tpl.text);
             setTimeout(() => {
@@ -1566,7 +1613,7 @@ export default function App() {
         {activeTab === "history" && renderHistory()}
         {activeTab === "queue"   && renderQueue()}
         {activeTab === "journal" && <JournalTab logs={logs} theme={theme} darkMode={darkMode} onEdit={log => startEdit(log)} onDelete={handleDelete}/>}
-        {activeTab === "threads" && <ThreadsTab logs={logs} links={links} theme={theme} darkMode={darkMode} onAddLink={addLink} onRemoveLink={removeLink} onEdit={log => startEdit(log)} mapHighlightId={mapHighlightId} getVerdictStyle={gvs} collections={collections} hiddenCollIds={hiddenCollIds} hideMap={true}/>}
+        {activeTab === "threads" && <ThreadsTab logs={logs} links={links} theme={theme} darkMode={darkMode} onAddLink={(a, b) => addLink(a, b, user)} onRemoveLink={(a, b) => removeLink(a, b, user)} onEdit={log => startEdit(log)} mapHighlightId={mapHighlightId} getVerdictStyle={gvs} collections={collections} hiddenCollIds={hiddenCollIds} hideMap={true}/>}
       </div>
 
       {/* ── TAB BAR ── */}
@@ -1694,6 +1741,9 @@ export default function App() {
           <button onClick={undoDelete} style={{ background:"#3498db", border:"none", color:"#fff", padding:"5px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontWeight:"700" }}>Undo</button>
         </div>
       )}
+
+      {/* ── DIALOGS (toast / confirm / prompt) ── */}
+      <DialogLayer />
     </div>
   );
 }

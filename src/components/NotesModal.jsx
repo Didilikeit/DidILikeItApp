@@ -8,9 +8,8 @@ export const NotesModal = ({ log, theme, darkMode, onClose, onSave }) => {
   const ss = getSubtypeStyle(log.media_type);
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText(log.notes || "")
-      .then(() => alert("Copied to clipboard!"))
-      .catch(() => {});
+    navigator.clipboard?.writeText(log.notes || "").catch(() => {});
+    // No alert — clipboard operations complete silently on modern browsers
   };
 
   return (

@@ -173,7 +173,7 @@ const DotsMenu = ({ log, theme, darkMode, onEdit, onDelete, onClose }) => (
   <div onClick={e => e.stopPropagation()} style={{ position:"absolute", top:"36px", right:"12px", zIndex:30, background:darkMode?"#1a1a1a":"#fff", border:"1px solid rgba(255,255,255,0.12)", borderRadius:"10px", overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,0.6)", minWidth:"140px", animation:"fadeInDown 0.15s ease" }}>
     <style>{`@keyframes fadeInDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
     <button onClick={() => { onEdit(); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.8)", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>✏️ Edit entry</button>
-    <button onClick={() => { if(window.confirm(`Delete "${log.title}"?`)){onDelete();onClose();} }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", color:"#e74c3c", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>🗑 Delete</button>
+    <button onClick={() => { onDelete(); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", color:"#e74c3c", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>🗑 Delete</button>
     <button onClick={onClose} style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderTop:"1px solid rgba(255,255,255,0.05)", color:"#444", fontSize:"11px", cursor:"pointer", textAlign:"left" }}>Cancel</button>
   </div>
 );

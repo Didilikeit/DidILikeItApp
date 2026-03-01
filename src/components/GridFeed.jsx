@@ -346,7 +346,7 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
             );
           })()}
           <div style={{ flex:1 }}/>
-          <button onClick={() => { if(window.confirm(`Delete "${log.title}"?`)) { onDelete(log.id); onClose(); } }}
+          <button onClick={() => { onDelete(log.id); onClose(); }}
             style={{ background:"none", border:"none", color:"rgba(231,76,60,0.5)",
               fontSize:14, cursor:"pointer", padding:"4px" }}>
             🗑

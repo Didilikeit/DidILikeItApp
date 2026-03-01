@@ -593,7 +593,7 @@ const DetailSheet = ({ log, darkMode, theme, onClose, onEdit, onDelete }) => {
               fontSize: 8, letterSpacing: "0.1em", cursor: "pointer" }}>
             ✏ EDIT
           </button>
-          <button onClick={() => { if (window.confirm(`Delete "${log.title}"?`)) { onDelete(log.id); onClose(); } }}
+          <button onClick={() => { onDelete(log.id); onClose(); }}
             style={{ flex: 1, padding: 10, borderRadius: 8,
               border: "1px solid rgba(231,76,60,0.25)", background: "none",
               color: "#e74c3c", fontFamily: "'Unbounded',sans-serif",

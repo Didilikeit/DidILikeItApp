@@ -31,13 +31,12 @@ export const hl = (content, term) => {
   const ht = term.replace(/^"|"$/g, "");
   if (!ht) return content;
   const esc = ht.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return content.toString()
-    .split(new RegExp("(" + esc + ")", "gi"))
-    .map((p, i) =>
-      p.toLowerCase() === ht.toLowerCase()
-        ? <mark key={i} style={{ backgroundColor:"#f1c40f", color:"#000", borderRadius:"2px", padding:"0 2px" }}>{p}</mark>
-        : p
-    );
+  const parts = content.toString().split(new RegExp("(" + esc + ")", "gi"));
+  return parts.map((p, i) =>
+    p.toLowerCase() === ht.toLowerCase()
+      ? <mark key={`hl-${i}`} style={{ backgroundColor:"#f1c40f", color:"#000", borderRadius:"2px", padding:"0 2px" }}>{p}</mark>
+      : p
+  );
 };
 
 // ─── COVER GRADIENT (for books without artwork) ───────────────────────────────
@@ -51,10 +50,12 @@ export const generateCoverGradient = title => {
 
 // ─── IMAGE COMPRESSION ────────────────────────────────────────────────────────
 export const compressImage = (file, maxWidth = 800, quality = 0.72) =>
-  new Promise(resolve => {
+  new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
     reader.onload = e => {
       const img = new Image();
+      img.onerror = () => reject(new Error("Could not load the image — unsupported format?"));
       img.onload = () => {
         const canvas = document.createElement("canvas");
         let w = img.width, h = img.height;
@@ -72,9 +73,11 @@ export const compressImage = (file, maxWidth = 800, quality = 0.72) =>
 export const geocodeVenue = async query => {
   if (!query || query.length < 3) return [];
   try {
+    // Note: User-Agent is a forbidden header in browser fetch and is silently
+    // ignored. Nominatim identification is handled via the app's domain in production.
     const r = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
-      { headers: { "Accept-Language": "en", "User-Agent": "DidILikeIt/1.0" } }
+      { headers: { "Accept-Language": "en" } }
     );
     const data = await r.json();
     return data.map(d => ({
@@ -159,8 +162,8 @@ export const getInsight = (logs, customName) => {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
 
-  // Most recent loved entry
-  const lastLoved = loved.sort((a,b) => new Date(b.logged_at) - new Date(a.logged_at))[0];
+  // Most recent loved entry — use spread to avoid mutating the filtered array
+  const lastLoved = [...loved].sort((a,b) => new Date(b.logged_at) - new Date(a.logged_at))[0];
 
   // Books vs films comparison
   const books = finished.filter(l => l.media_type === "Book");
@@ -224,31 +227,50 @@ export const getInsight = (logs, customName) => {
 };
 
 // ─── LOG FILTERING ────────────────────────────────────────────────────────────
+// Uses a fixed locale so month strings are consistent across browsers/devices.
+const MONTH_LOCALE = "en-US";
+
+export const formatMonthYear = date =>
+  new Date(date).toLocaleString(MONTH_LOCALE, { month: "long", year: "numeric" });
+
 export const filterLogs = (arr, term, catF, vF, month, sort, view) => {
+  // Pre-compile search regexes once, outside the filter loop
+  let doneRegs = [];
+  let curReg = null;
+  let exactPhrase = null;
+
+  if (term) {
+    const t = term.toLowerCase().trim();
+    if (t.startsWith('"')) {
+      exactPhrase = t.replace(/^"|"$/g, "");
+    } else {
+      const parts = t.split(" ");
+      const done = parts.slice(0, -1);
+      const cur = parts[parts.length - 1];
+      doneRegs = done
+        .filter(Boolean)
+        .map(w => new RegExp(`(?<![a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "i"));
+      if (cur) {
+        curReg = new RegExp(`(?<![a-z])${cur.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i");
+      }
+    }
+  }
+
   return arr.filter(log => {
     const isQueueV = log.verdict?.startsWith("Want to") || log.verdict === "Want to go";
     const isActive = log.verdict?.startsWith("Currently");
-    const lmy = log.logged_at
-      ? new Date(log.logged_at).toLocaleString("default", { month:"long", year:"numeric" })
-      : "";
+    const lmy = log.logged_at ? formatMonthYear(log.logged_at) : "";
 
     let matchSearch = true;
     if (term) {
-      const t = term.toLowerCase().trim();
-      if (t.startsWith('"')) {
-        const ph = t.replace(/^"|"$/g, "");
+      if (exactPhrase !== null) {
         matchSearch = [log.title, log.creator, log.notes, log.location_venue, log.location_city]
-          .some(f => (f || "").toLowerCase().includes(ph));
+          .some(f => (f || "").toLowerCase().includes(exactPhrase));
       } else {
         const src = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${lmy} ${log.location_venue||""} ${log.location_city||""}`.toLowerCase();
-        const parts = t.split(" ");
-        const done = parts.slice(0, -1);
-        const cur = parts[parts.length - 1];
-        matchSearch = done.every(w => {
-          if (!w) return true;
-          const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          return new RegExp(`(?<![a-z])${esc}(?![a-z])`, "i").test(src);
-        }) && (cur === "" || new RegExp(`(?<![a-z])${cur.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(src));
+        matchSearch =
+          doneRegs.every(r => r.test(src)) &&
+          (curReg === null || curReg.test(src));
       }
     }
 
@@ -274,21 +296,35 @@ export const filterLogs = (arr, term, catF, vF, month, sort, view) => {
 };
 
 // ─── CSV EXPORT ───────────────────────────────────────────────────────────────
+// Every field is quoted and internal quotes are doubled (RFC 4180).
+// This prevents formula injection in spreadsheet applications.
+const csvCell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
 export const exportCSV = (logs, collections) => {
   const headers = ["Title","Creator","Type","Category","Verdict","Genre","Year","Venue","City","Lat","Lng","Collection","Notes","Date"];
   const rows = logs.map(l => {
     const coll = collections.find(c => c.id === l.collection_id);
     return [
-      `"${l.title}"`, `"${l.creator||""}"`, l.media_type, getCat(l.media_type),
-      l.verdict, l.genre||"", l.year_released||"", l.location_venue||"",
-      l.location_city||"", l.lat||"", l.lng||"", coll?.name||"",
-      `"${(l.notes||"").replace(/"/g, '""')}"`,
-      new Date(l.logged_at).toLocaleDateString(),
+      csvCell(l.title),
+      csvCell(l.creator),
+      csvCell(l.media_type),
+      csvCell(getCat(l.media_type)),
+      csvCell(l.verdict),
+      csvCell(l.genre),
+      csvCell(l.year_released),
+      csvCell(l.location_venue),
+      csvCell(l.location_city),
+      csvCell(l.lat),
+      csvCell(l.lng),
+      csvCell(coll?.name),
+      csvCell(l.notes),
+      csvCell(new Date(l.logged_at).toLocaleDateString("en-GB")),
     ];
   });
-  const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+  const csv = [headers.map(csvCell), ...rows].map(r => r.join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = "my-culture-log.csv";
   a.click();
+  URL.revokeObjectURL(a.href);
 };

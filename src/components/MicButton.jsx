@@ -15,12 +15,9 @@ export const MicButton = ({ currentText, onTextChange, theme, darkMode, size = "
       () => {
         const transcript = finalRef.current.trim();
         if (!transcript) return;
-        if (currentText?.trim()) {
-          const addTo = window.confirm("You already have notes.\n\nOK = Add to existing\nCancel = Replace");
-          onTextChange(addTo ? currentText.trim() + " " + transcript : transcript);
-        } else {
-          onTextChange(transcript);
-        }
+        // Always append to existing notes — appending is non-destructive and the
+        // user can edit manually. This avoids a blocking confirm() dialog.
+        onTextChange(currentText?.trim() ? currentText.trim() + " " + transcript : transcript);
       }
     );
   };
