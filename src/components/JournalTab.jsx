@@ -611,13 +611,23 @@ export const JournalTab = ({ logs, theme, darkMode, onEdit, onDelete }) => {
   const [view, setView] = useState("calendar");
   const [selectedLog, setSelectedLog] = useState(null);
 
-  // Push history when detail sheet opens so Android back closes it
+  // When detail sheet opens: push history sentinel (web) + register on __backStack (native)
   React.useEffect(() => {
-    if (selectedLog) {
-      window.history.pushState({ dili: "journal-detail" }, "");
-    }
+    if (!selectedLog) return;
+    window.history.pushState({ dili: "journal-detail" }, "");
+    if (!window.__backStack) window.__backStack = [];
+    const dismiss = () => {
+      setSelectedLog(null);
+      window.__backStack = window.__backStack.filter(h => h !== dismiss);
+      window.history.pushState({ dili: "sentinel" }, "");
+    };
+    window.__backStack.push(dismiss);
+    return () => {
+      window.__backStack = window.__backStack?.filter(h => h !== dismiss);
+    };
   }, [selectedLog?.id]);
 
+  // Web popstate only — Capacitor native back handled via __backStack in App.jsx
   React.useEffect(() => {
     const onPop = () => {
       if (selectedLog) {

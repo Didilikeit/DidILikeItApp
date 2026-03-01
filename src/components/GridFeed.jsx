@@ -425,21 +425,31 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
     }
   }, [logs]);
 
-  // Push history state when a card is opened so Android back closes it
+  // When a card opens: push history sentinel (web) + register on __backStack (native)
   useEffect(() => {
-    if (selected) window.history.pushState({ dili: "card" }, "");
+    if (!selected) return;
+    window.history.pushState({ dili: "card" }, "");
+    if (!window.__backStack) window.__backStack = [];
+    const dismiss = () => {
+      setSelected(null);
+      window.__backStack = window.__backStack.filter(h => h !== dismiss);
+      window.history.pushState({ dili: "sentinel" }, "");
+    };
+    window.__backStack.push(dismiss);
+    return () => {
+      window.__backStack = window.__backStack?.filter(h => h !== dismiss);
+    };
   }, [selected?.id]);
 
-  // Android back button — close card/notes panel, then re-push sentinel
+  // Web popstate — fires on browser/Chrome back, not on Capacitor native back
   useEffect(() => {
     const onPop = () => {
       if (selected) {
         setSelected(null);
         window.history.pushState({ dili: "sentinel" }, "");
-        return;
+      } else {
+        window.history.pushState({ dili: "sentinel" }, "");
       }
-      // Nothing open here — re-push so App.jsx handler gets next back press
-      window.history.pushState({ dili: "sentinel" }, "");
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
