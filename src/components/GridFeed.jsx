@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getSubtypeStyle, generateCoverGradient } from "../utils/helpers.js";
+import { getSubtypeStyle, generateCoverGradient, getCat } from "../utils/helpers.js";
 import { VERDICT_PILL_STYLE } from "./EditorialCard.jsx";
 
 // ─── FONTS ────────────────────────────────────────────────────────────────────
@@ -10,6 +10,14 @@ if (!document.getElementById("editorial-fonts")) {
   link.href = "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Unbounded:wght@300;400;700;900&display=swap";
   document.head.appendChild(link);
 }
+
+// Aspect ratio per category: portraits for watched/read, square for music, landscape for experiences
+const getAspectRatio = mediaType => {
+  const cat = getCat(mediaType);
+  if (cat === "Listened") return "1 / 1";
+  if (cat === "Experienced") return "4 / 3";
+  return "2 / 3"; // Movies, TV, Books — portrait posters
+};
 
 const VERDICT_BAND = v => ({
   "I loved it":         "linear-gradient(to bottom,#f1c40f,#e67e22)",
@@ -477,10 +485,11 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
     }
   }, [deepLinkOpenId]);
 
-  return (
-    <>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:GAP, padding:GAP }}>
-        {logs.map(log => {
+  // Split logs into two columns for masonry layout
+  const col1 = logs.filter((_, i) => i % 2 === 0);
+  const col2 = logs.filter((_, i) => i % 2 === 1);
+
+  const renderCard = (log) => {
           const vp = VERDICT_PILL_STYLE(log.verdict);
           const ss = getSubtypeStyle(log.media_type);
           const isCurrent = log.verdict?.startsWith("Currently");
@@ -504,9 +513,9 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
             }
           }
 
-          return (
-            <div key={log.id}
-              onClick={() => { if (!didLongPress.current) setSelected(log); }}
+    return (
+      <div key={log.id}
+        onClick={() => { if (!didLongPress.current) setSelected(log); }}
               onTouchStart={() => {
                 didLongPress.current = false;
                 if (!log.artwork) return;
@@ -527,7 +536,7 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
               }}
               onMouseUp={() => clearTimeout(pressTimer.current)}
               onMouseLeave={() => clearTimeout(pressTimer.current)}
-              style={{ position:"relative", aspectRatio:"1", cursor:"pointer",
+              style={{ position:"relative", aspectRatio: getAspectRatio(log.media_type), cursor:"pointer",
                 borderRadius:3, overflow:"hidden", background:"#0f0f0f",
                 WebkitUserSelect:"none", userSelect:"none",
                 WebkitTouchCallout:"none",
@@ -614,8 +623,18 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
                   boxShadow:"0 0 5px rgba(255,255,255,0.3)", pointerEvents:"none" }}/>
               )}
             </div>
-          );
-        })}
+    );
+  };
+
+  return (
+    <>
+      <div style={{ display:"flex", gap:GAP, padding:GAP, alignItems:"flex-start" }}>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:GAP }}>
+          {col1.map(log => renderCard(log))}
+        </div>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:GAP }}>
+          {col2.map(log => renderCard(log))}
+        </div>
       </div>
 
       {selected && (

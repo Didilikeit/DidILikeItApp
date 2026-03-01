@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { supabase } from "./utils/supabase.js";
+import { supabase, fetchCollections, createCollection, updateCollection, deleteCollection as deleteCollectionFromDB, mergeGuestCollections } from "./utils/supabase.js";
 import { CATEGORIES, COLL_EMOJIS, API_TYPES, CREATOR_LABELS, PROGRESS_CONFIG } from "./utils/constants.js";
 import { buildTheme, getVerdictStyle } from "./utils/theme.js";
 import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight } from "./utils/helpers.js";
@@ -34,9 +34,7 @@ export default function App() {
   const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink } = useLogs();
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [lastQuickLogEntry, setLastQuickLogEntry] = useState(null);
-  const [collections, setCollections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("dili_collections") || "[]"); } catch { return []; }
-  });
+  const [collections, setCollections] = useState([]);
 
   // ── UI State ──
   const [activeTab, setActiveTab] = useState("home");
@@ -143,6 +141,14 @@ export default function App() {
   const touchStartY = useRef(0);
   const PULL_THRESHOLD = 72;
 
+  // Collections load independently — failures must never block the app,
+  // but the function returns a promise so callers can await it when needed.
+  const loadCollections = useCallback((u) => {
+    return fetchCollections(u)
+      .then(colls => setCollections(colls))
+      .catch(e => console.warn("[collections] load failed (table may not exist yet):", e.message));
+  }, []);
+
   const handleTouchStart = useCallback(e => {
     if (scrollRef.current?.scrollTop === 0) touchStartY.current = e.touches[0].clientY;
     else touchStartY.current = 0;
@@ -162,7 +168,7 @@ export default function App() {
       setRefreshing(true);
       setPullDist(PULL_THRESHOLD);
       try {
-        await fetchLogs(user);
+        await Promise.all([fetchLogs(user), loadCollections(user)]);
         // Reset all filters and searches back to defaults
         setHistorySearch("");
         setFilterCat("All");
@@ -184,12 +190,24 @@ export default function App() {
       setPulling(false); setPullDist(0);
     }
     touchStartY.current = 0;
-  }, [pulling, pullDist, fetchLogs, user]);
+  }, [pulling, pullDist, fetchLogs, loadCollections, user]);
+
+  // Reload data when the user switches back to this tab/window
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchLogs(user);
+        loadCollections(user);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [fetchLogs, loadCollections, user]);
 
   // Persist settings
   useEffect(() => { document.body.style.backgroundColor = theme.bg; }, [theme.bg]);
   useEffect(() => { localStorage.setItem("dark_mode", darkMode); }, [darkMode]);
-  useEffect(() => { localStorage.setItem("dili_collections", JSON.stringify(collections)); }, [collections]);
+  // (collections are now persisted to Supabase, not localStorage)
 
   // Auto-grow textarea
   useEffect(() => {
@@ -312,13 +330,17 @@ export default function App() {
   // which fires a popstate event — so the listener below covers both web and native.
 
   // ── Auth init ──
+  // (loadCollections defined above, near pull-to-refresh)
+
   useEffect(() => {
     const init = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const u = session?.user ?? null;
         setUser(u);
+        // fetchLogs is required to show the app; loadCollections is best-effort
         await fetchLogs(u);
+        loadCollections(u);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -333,11 +355,20 @@ export default function App() {
           if (error) alert(error.message); else alert("Password updated!");
         }
       }
-      if (u) { setShowAuthModal(false); setAuthMsg(""); await mergeGuestLogs(u.id); }
-      else fetchLogs(null);
+      if (u) {
+        setShowAuthModal(false); setAuthMsg("");
+        await mergeGuestLogs(u.id);
+        // Migrate guest collections then reload — failures are non-fatal
+        mergeGuestCollections(u.id)
+          .then(() => loadCollections(u))
+          .catch(e => console.warn("[collections] merge failed:", e.message));
+      } else {
+        fetchLogs(null);
+        loadCollections(null);
+      }
     });
     return () => subscription.unsubscribe();
-  }, [fetchLogs, mergeGuestLogs]);
+  }, [fetchLogs, mergeGuestLogs, loadCollections]);
 
   // ── Derived data ──
   const globalResults = useMemo(() => {
@@ -601,24 +632,35 @@ export default function App() {
   };
 
   // Collection actions
-  const saveCollection = () => {
+  const saveCollection = async () => {
     if (!collName.trim()) return;
-    if (editingColl) setCollections(prev => prev.map(c => c.id === editingColl ? { ...c, name: collName.trim(), emoji: collEmoji, desc: collDesc.trim() } : c));
-    else setCollections(prev => [...prev, { id: Date.now().toString(), name: collName.trim(), emoji: collEmoji, desc: collDesc.trim(), createdAt: new Date().toISOString() }]);
+    const name = collName.trim();
+    const emoji = collEmoji;
+    const desc = collDesc.trim();
+
+    // Close the modal immediately so the UI feels instant
     setShowCollModal(false); setCollName(""); setCollEmoji("🗂"); setCollDesc(""); setEditingColl(null);
-  };
-  const deleteCollection = async id => {
-    if (!window.confirm("Delete this collection? Entries stay but lose their collection tag.")) return;
-    setCollections(prev => prev.filter(c => c.id !== id));
-    if (user) {
-      // Clear collection_id for all affected rows in Supabase
-      await supabase.from("logs").update({ collection_id: null }).eq("collection_id", id);
-      await fetchLogs(user);
+
+    if (editingColl) {
+      // Optimistic update
+      setCollections(prev => prev.map(c => c.id === editingColl ? { ...c, name, emoji, desc } : c));
+      await updateCollection(user, editingColl, { name, emoji, desc });
     } else {
-      const cur = JSON.parse(localStorage.getItem("guest_logs") || "[]");
-      localStorage.setItem("guest_logs", JSON.stringify(cur.map(l => l.collection_id === id ? { ...l, collection_id: null } : l)));
-      fetchLogs(null);
+      // Optimistic insert with a temporary id
+      const tempId = "temp_" + Date.now();
+      setCollections(prev => [...prev, { id: tempId, name, emoji, desc, created_at: new Date().toISOString() }]);
+      const created = await createCollection(user, { name, emoji, desc });
+      // Replace temp entry with real one from Supabase (has correct UUID)
+      if (created) {
+        setCollections(prev => prev.map(c => c.id === tempId ? { ...created, desc: created.description ?? desc } : c));
+      }
     }
+  };
+  const handleDeleteCollection = async id => {
+    if (!window.confirm("Delete this collection? Entries stay but lose their collection tag.")) return;
+    await deleteCollectionFromDB(user, id);
+    await loadCollections(user);
+    if (user) await fetchLogs(user); else fetchLogs(null);
   };
   const openEditColl = c => { setEditingColl(c.id); setCollName(c.name); setCollEmoji(c.emoji || "🗂"); setCollDesc(c.desc || ""); setShowCollModal(true); };
   const saveName = () => { localStorage.setItem("user_custom_name", customName.trim()); setIsEditingName(false); };
@@ -1306,7 +1348,7 @@ export default function App() {
                       </div>
                       <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
                         <button onClick={e => { e.stopPropagation(); openEditColl(coll); }} style={{ background:"none", border:`1px solid ${theme.border}`, color:theme.subtext, fontSize:"11px", padding:"4px 8px", borderRadius:"8px", cursor:"pointer" }}>Edit</button>
-                        <button onClick={e => { e.stopPropagation(); deleteCollection(coll.id); }} style={{ background:"none", border:"none", color:"#e74c3c", fontSize:"16px", cursor:"pointer", padding:"4px" }}>🗑</button>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteCollection(coll.id); }} style={{ background:"none", border:"none", color:"#e74c3c", fontSize:"16px", cursor:"pointer", padding:"4px" }}>🗑</button>
                         <span style={{ fontSize:"12px", color:theme.subtext, display:"inline-block", transition:"transform 0.2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>⌄</span>
                       </div>
                     </div>

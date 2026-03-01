@@ -1,17 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApiSearch } from "../hooks/useApiSearch.js";
-import { CATEGORIES, API_TYPES } from "../utils/constants.js";
+import { CATEGORIES, API_TYPES, SUBTYPE_TO_CAT } from "../utils/constants.js";
 import { getSubtypeStyle } from "../utils/helpers.js";
 import { getVerdictStyle } from "../utils/theme.js";
 
-// Inject fonts
-if (!document.getElementById("quicklog-fonts")) {
-  const l = document.createElement("link");
-  l.id = "quicklog-fonts";
-  l.rel = "stylesheet";
-  l.href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Serif+Display:ital@0;1&display=swap";
-  document.head.appendChild(l);
-}
+// (fonts injected via useEffect inside component)
 
 // Verdict options — derived from getVerdictStyle to stay in sync with the rest of the app.
 const VERDICT_KEYS = ["I loved it", "I liked it", "Meh", "I didn't like it"];
@@ -23,8 +16,27 @@ const ALL_TYPES = Object.entries(CATEGORIES).flatMap(([cat, def]) =>
 
 const COMMON_TYPES = ["Movie", "TV Series", "Book", "Album", "Podcast", "Restaurant / Food", "Gig / Concert"];
 
+// Derive the correct "want to" verdict for a given media type
+const getWantVerdict = mediaType => {
+  const cat = SUBTYPE_TO_CAT[mediaType] || "Watched";
+  if (cat === "Read")       return "Want to read";
+  if (cat === "Listened")   return "Want to listen";
+  if (cat === "Experienced") return "Want to go";
+  return "Want to watch";
+};
+
 export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => {
   const [step, setStep] = useState("type"); // type | search | verdict | done
+
+  // FIX: inject fonts inside component lifecycle instead of at module load time
+  useEffect(() => {
+    if (document.getElementById("quicklog-fonts")) return;
+    const l = document.createElement("link");
+    l.id = "quicklog-fonts";
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Serif+Display:ital@0;1&display=swap";
+    document.head.appendChild(l);
+  }, []);
   const [mediaType, setMediaType] = useState("");
   const [title, setTitle] = useState("");
   const [creator, setCreator] = useState("");
@@ -35,6 +47,7 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
   const [saving, setSaving] = useState(false);
   const [showAllTypes, setShowAllTypes] = useState(false);
   const inputRef = useRef(null);
+  const inputWrapperRef = useRef(null); // FIX: used to position results above input
 
   const { searchResults, setSearchResults, selectResult } = useApiSearch(
     step === "search" ? title : "",
@@ -165,7 +178,7 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
               </div>
             </div>
 
-            <div style={{ position: "relative" }}>
+            <div ref={inputWrapperRef} style={{ position: "relative" }}>
               <input
                 ref={inputRef}
                 value={title}
@@ -181,15 +194,28 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
                 }}
               />
 
-              {/* API results dropdown */}
-              {searchResults.length > 0 && (
+              {/* results rendered outside sheet below via portal-style fixed div */}
+            </div>
+
+            {/* FIX: results rendered above the input using fixed positioning so they
+                 are never clipped by the bottom sheet's overflow:hidden */}
+            {searchResults.length > 0 && (() => {
+              const rect = inputWrapperRef.current?.getBoundingClientRect();
+              const top = rect ? rect.top : 300;
+              const left = rect ? rect.left : 20;
+              const width = rect ? rect.width : 320;
+              return (
                 <div style={{
-                  position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 10,
+                  position: "fixed",
+                  bottom: `calc(100vh - ${top}px + 8px)`,
+                  left, width,
+                  zIndex: 600,
                   background: darkMode ? "#111" : "#fff",
                   border: `1px solid ${theme.border}`,
-                  borderRadius: 14, overflow: "hidden",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                  maxHeight: 240, overflowY: "auto",
+                  borderRadius: 14,
+                  boxShadow: "0 -4px 32px rgba(0,0,0,0.5)",
+                  maxHeight: 280,
+                  overflowY: "auto",
                 }}>
                   {searchResults.slice(0, 5).map((item, i) => {
                     const at = API_TYPES[mediaType];
@@ -212,8 +238,8 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
                     );
                   })}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {title.trim().length > 0 && searchResults.length === 0 && (
               <button onClick={handleSearchNext}
@@ -237,7 +263,34 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
               {artwork && <img src={artwork} alt="" style={{ width: 36, height: 50, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={e => e.target.style.display = "none"} />}
             </div>
 
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.subtext, marginBottom: 12 }}>Did you like it?</div>
+            {/* ── WISHLIST SHORTCUT ── */}
+            <button
+              onClick={() => handleVerdictSelect(getWantVerdict(mediaType))}
+              disabled={saving}
+              className="ql-verdict-btn"
+              style={{
+                width: "100%", padding: "16px 20px", borderRadius: 14, marginBottom: 16,
+                border: `1px solid rgba(155,89,182,0.4)`,
+                background: darkMode ? "rgba(155,89,182,0.15)" : "#f3e5f5",
+                color: darkMode ? "#ce93d8" : "#6a1b9a",
+                fontWeight: 700, fontSize: 15, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 10,
+                transition: "all 0.15s",
+                opacity: saving ? 0.5 : 1,
+                textAlign: "left",
+              }}>
+              <span style={{ fontSize: 20 }}>⏳</span>
+              <div>
+                <div>{getWantVerdict(mediaType)}</div>
+                <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.7, marginTop: 2 }}>Save to your wishlist</div>
+              </div>
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1, height: 1, background: theme.border }}/>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.subtext }}>Already seen it?</div>
+              <div style={{ flex: 1, height: 1, background: theme.border }}/>
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {VERDICT_KEYS.map(v => {
@@ -271,7 +324,7 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
             <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, color: theme.text, marginBottom: 6 }}>Logged!</div>
             <div style={{ fontSize: 13, color: theme.subtext, marginBottom: 28 }}>
-              <em>{title}</em> saved to your history.
+              <em>{title}</em> {verdict?.startsWith("Want to") || verdict === "Want to go" ? "added to your wishlist." : "saved to your history."}
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>

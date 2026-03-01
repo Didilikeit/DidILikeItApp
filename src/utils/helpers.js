@@ -34,6 +34,7 @@ export const hl = (content, term) => {
   if (!term || !content) return content;
   const ht = term.replace(/^"|"$/g, "");
   if (!ht) return content;
+  // Escape special regex characters
   const esc = ht.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return content.toString()
     .split(new RegExp("(" + esc + ")", "gi"))
@@ -79,8 +80,9 @@ export const geocodeVenue = async query => {
   try {
     const r = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
-      { headers: { "Accept-Language": "en", "User-Agent": "DidILikeIt/1.0" } }
+      { headers: { "Accept-Language": "en", "User-Agent": "DidILikeIt/1.0 (contact@didilikeit.app)" } }
     );
+    if (!r.ok) return [];
     const data = await r.json();
     return data.map(d => ({
       display: d.display_name,
@@ -169,8 +171,8 @@ export const getInsight = (logs, customName) => {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
 
-  // Most recent loved entry
-  const lastLoved = loved.sort((a,b) => new Date(b.logged_at) - new Date(a.logged_at))[0];
+  // FIX: copy array before sorting so we don't mutate the original
+  const lastLoved = [...loved].sort((a,b) => new Date(b.logged_at) - new Date(a.logged_at))[0];
 
   // Books vs films comparison
   const books = finished.filter(l => l.media_type === "Book");
@@ -247,18 +249,22 @@ export const filterLogs = (arr, term, catF, vF, month, sort, view) => {
       const t = term.toLowerCase().trim();
       if (t.startsWith('"')) {
         const ph = t.replace(/^"|"$/g, "");
-        matchSearch = [log.title, log.creator, log.notes, log.location_venue, log.location_city]
+        // FIX: include genre and year in phrase search
+        matchSearch = [log.title, log.creator, log.notes, log.location_venue, log.location_city, log.genre, log.year_released?.toString()]
           .some(f => (f || "").toLowerCase().includes(ph));
       } else {
-        const src = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${lmy} ${log.location_venue||""} ${log.location_city||""}`.toLowerCase();
+        // FIX: include genre and year in keyword search
+        const src = `${log.title} ${log.creator} ${log.notes} ${log.verdict} ${lmy} ${log.location_venue||""} ${log.location_city||""} ${log.genre||""} ${log.year_released||""}`.toLowerCase();
         const parts = t.split(" ");
         const done = parts.slice(0, -1);
         const cur = parts[parts.length - 1];
-        matchSearch = done.every(w => {
+        // FIX: replace lookbehind regex with cross-browser compatible word boundary check
+        const wordMatch = w => {
           if (!w) return true;
           const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          return new RegExp(`(?<![a-z])${esc}(?![a-z])`, "i").test(src);
-        }) && (cur === "" || new RegExp(`(?<![a-z])${cur.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(src));
+          return new RegExp(`(^|[^a-z])${esc}`, "i").test(src);
+        };
+        matchSearch = done.every(wordMatch) && (cur === "" || wordMatch(cur));
       }
     }
 
@@ -298,7 +304,10 @@ export const exportCSV = (logs, collections) => {
   });
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  // FIX: revoke the object URL after click to prevent memory leak
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.href = url;
   a.download = "my-culture-log.csv";
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 };

@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { VERDICT_MAP_COLOR, getSubtypeStyle } from "../utils/helpers.js";
 
 export const NotesModal = ({ log, theme, darkMode, onClose, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(log.notes || "");
+  // FIX: keep edit text in sync if notes are updated externally (e.g. via voice on card back)
+  useEffect(() => { if (!editing) setEditText(log.notes || ""); }, [log.notes, editing]);
   const color = VERDICT_MAP_COLOR(log.verdict);
   const ss = getSubtypeStyle(log.media_type);
 

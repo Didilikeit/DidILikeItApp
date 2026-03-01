@@ -7,6 +7,7 @@ import { CATEGORIES } from "../utils/constants.js";
 export const MediaCard = ({ log, theme, darkMode, getVerdictStyle, onEdit, onDelete, searchTerm, collection, onMapClick, onNotesUpdate }) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false); // FIX: React state instead of getElementById
   const vs = getVerdictStyle(log.verdict);
   const ss = getSubtypeStyle(log.media_type);
   const isExp = ss.cat === "Experienced";
@@ -18,7 +19,7 @@ export const MediaCard = ({ log, theme, darkMode, getVerdictStyle, onEdit, onDel
     if (term?.length > 1) {
       const clean = term.replace(/^"|"$/g, "").toLowerCase();
       const nl = notes.toLowerCase();
-      const idx = nl.search(new RegExp("(?<![a-z])" + clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      const idx = nl.search(new RegExp("(^|[^a-z])" + clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
       if (idx !== -1) {
         const wb = notes.slice(0, idx).trim() === "" ? 0 : notes.slice(0, idx).trim().split(/\s+/).length;
         const s = Math.max(0, wb - 8), e = Math.min(words.length, wb + 12);
@@ -96,15 +97,14 @@ export const MediaCard = ({ log, theme, darkMode, getVerdictStyle, onEdit, onDel
           <div style={{ backfaceVisibility:"hidden", WebkitBackfaceVisibility:"hidden", background:theme.card, borderRadius:"14px", overflow:"hidden", border:`1px solid ${theme.border}`, display:"flex", flexDirection:"column" }}>
             <MetaHeader showFlipBtn={false} />
             <div style={{ position:"relative", width:"100%", aspectRatio:"2/3", backgroundColor:darkMode?"#111":"#eee", overflow:"hidden" }}>
-              {log.artwork ? (
+              {log.artwork && !imgFailed ? (
                 <>
                   <img
                     src={log.artwork} alt=""
                     style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                    onLoad={e => { if (e.target.naturalWidth < 128 && isRead) { e.target.style.display="none"; document.getElementById(`fb-${log.id}`)?.style?.setProperty("display","flex"); } }}
-                    onError={e => { e.target.style.display="none"; document.getElementById(`fb-${log.id}`)?.style?.setProperty("display","flex"); }}
+                    onLoad={e => { if (e.target.naturalWidth < 128 && isRead) setImgFailed(true); }}
+                    onError={() => setImgFailed(true)}
                   />
-                  <div id={`fb-${log.id}`} style={{ display:"none", position:"absolute", top:0, left:0, width:"100%", height:"100%" }}><ArtworkFallback /></div>
                 </>
               ) : <ArtworkFallback />}
 

@@ -15,12 +15,28 @@ export const ActivityCalendar = ({ logs, theme, darkMode }) => {
   }, [logs]);
 
   const { currentStreak, longestStreak } = useMemo(() => {
-    let cur = 0, longest = 0, running = 0;
+    // Longest streak: scan forward through all days
+    let longest = 0, running = 0;
     for (let i = 0; i < days.length; i++) {
       if (days[i].count > 0) { running++; if (running > longest) longest = running; }
       else running = 0;
     }
-    for (let i = 59; i >= 0; i--) { if (days[i].count > 0) cur++; else break; }
+    // FIX: current streak counts back from the most recent active day, not strictly today.
+    // This means a streak isn't broken just because you haven't logged yet today.
+    let cur = 0;
+    // Find the most recent active day (today or yesterday counts as "current")
+    let startIdx = -1;
+    if (days[59].count > 0) {
+      startIdx = 59; // today has activity
+    } else if (days[58]?.count > 0) {
+      startIdx = 58; // yesterday has activity — streak still alive
+    }
+    if (startIdx >= 0) {
+      for (let i = startIdx; i >= 0; i--) {
+        if (days[i].count > 0) cur++;
+        else break;
+      }
+    }
     return { currentStreak: cur, longestStreak: longest };
   }, [days]);
 
