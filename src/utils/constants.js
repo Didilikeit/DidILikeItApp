@@ -13,9 +13,9 @@ export const TMDB_GENRES = {
 
 // ─── CATEGORIES & SUBTYPES ────────────────────────────────────────────────────
 export const CATEGORIES = {
-  Read:        { icon:"📖", color:"#3498db", subtypes:["Book","Comic / Graphic Novel","Short Story / Essay"] },
+  Read:        { icon:"📖", color:"#3498db", subtypes:["Book","Comic / Graphic Novel","Short Story / Essay","Audiobook"] },
   Watched:     { icon:"🎬", color:"#9b59b6", subtypes:["Movie","TV Series","Documentary","YouTube / Online Series","Short Film","Sport"] },
-  Listened:    { icon:"🎵", color:"#1abc9c", subtypes:["Album","Podcast","Audiobook"] },
+  Listened:    { icon:"🎵", color:"#1abc9c", subtypes:["Album","Podcast"] },
   Experienced: { icon:"✨", color:"#e67e22", subtypes:["Gig / Concert","Play / Theatre","Gallery / Museum","Landmark / Place","Restaurant / Food","Sports Event","Festival"] },
 };
 

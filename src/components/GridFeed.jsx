@@ -242,10 +242,22 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
         )}
 
         {/* ── Hero strip ── */}
-        <div style={{ height:200, position:"relative", flexShrink:0, overflow:"hidden" }}>
+        {(() => {
+          // For square artwork (albums), constrain width so it doesn't look stretched
+          const heroCat = getCat(log.media_type);
+          const isSquareArt = heroCat === "Listened";
+          return (
+        <div style={{ height:200, position:"relative", flexShrink:0, overflow:"hidden",
+          display:"flex", alignItems:"center", justifyContent:"center", background:"#080808" }}>
           {log.artwork && !imgErr
             ? <img src={log.artwork} alt="" onError={() => setImgErr(true)}
-                style={{ width:"100%", height:"100%", objectFit:"cover", filter:"brightness(0.45) saturate(0.65)" }}/>
+                style={{
+                  width: isSquareArt ? "auto" : "100%",
+                  height: isSquareArt ? "100%" : "100%",
+                  maxWidth: "100%",
+                  objectFit: isSquareArt ? "contain" : "cover",
+                  filter:"brightness(0.5) saturate(0.65)"
+                }}/>
             : <div style={{ width:"100%", height:"100%",
                 background:`linear-gradient(145deg,${color1},${color2})`,
                 display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -253,7 +265,7 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
               </div>
           }
           <div style={{ position:"absolute", inset:0,
-            background:"linear-gradient(to bottom,rgba(8,8,8,0) 0%,rgba(8,8,8,0.85) 70%,rgba(8,8,8,1) 100%)" }}/>
+            background:"linear-gradient(to bottom,rgba(8,8,8,0) 0%,rgba(8,8,8,0.88) 70%,rgba(8,8,8,1) 100%)" }}/>
           <div style={{ position:"absolute", top:0, left:0, bottom:0, width:3, background:VERDICT_BAND(log.verdict) }}/>
 
           <button onClick={onClose}
@@ -283,6 +295,8 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
             </div>
           </div>
         </div>
+          );
+        })()}
 
         {/* ── Meta row ── */}
         <div style={{ padding:"12px 18px 10px", display:"flex", alignItems:"center", gap:8,
@@ -485,9 +499,22 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
     }
   }, [deepLinkOpenId]);
 
-  // Split logs into two columns for masonry layout
-  const col1 = logs.filter((_, i) => i % 2 === 0);
-  const col2 = logs.filter((_, i) => i % 2 === 1);
+  // True masonry: assign each card to whichever column is shorter.
+  // Heights are estimated from aspect ratio so we don't need to measure DOM.
+  const getEstimatedHeight = (log) => {
+    const cat = getCat(log.media_type);
+    const colWidth = (window.innerWidth - GAP * 3) / 2;
+    if (cat === "Listened") return colWidth * 1;        // 1:1
+    if (cat === "Experienced") return colWidth * 0.75;  // 4:3
+    return colWidth * 1.5;                              // 2:3 portrait
+  };
+  const col1 = [], col2 = [];
+  let h1 = 0, h2 = 0;
+  for (const log of logs) {
+    const h = getEstimatedHeight(log) + GAP;
+    if (h1 <= h2) { col1.push(log); h1 += h; }
+    else          { col2.push(log); h2 += h; }
+  }
 
   const renderCard = (log) => {
           const vp = VERDICT_PILL_STYLE(log.verdict);
@@ -545,11 +572,11 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
 
               <ArtworkTile log={log}/>
 
-              {/* Bottom gradient — deeper when progress bar is showing */}
+              {/* Bottom gradient — stronger for better legibility on light artwork */}
               <div style={{ position:"absolute", inset:0,
                 background: progressPct != null
-                  ? "linear-gradient(to bottom,transparent 20%,rgba(0,0,0,0.97) 100%)"
-                  : "linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.92) 100%)",
+                  ? "linear-gradient(to bottom,transparent 10%,rgba(0,0,0,0.5) 45%,rgba(0,0,0,0.98) 100%)"
+                  : "linear-gradient(to bottom,transparent 20%,rgba(0,0,0,0.45) 50%,rgba(0,0,0,0.95) 100%)",
                 pointerEvents:"none" }}/>
 
               {/* Verdict/progress stripe on left */}
@@ -568,7 +595,8 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
                 <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:11,
                   color:"#fff", lineHeight:1.2, marginBottom:4,
                   display:"-webkit-box", WebkitLineClamp:2,
-                  WebkitBoxOrient:"vertical", overflow:"hidden" }}>
+                  WebkitBoxOrient:"vertical", overflow:"hidden",
+                  textShadow:"0 1px 6px rgba(0,0,0,0.8)" }}>
                   {log.title}
                 </div>
 
