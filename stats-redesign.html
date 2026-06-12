@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stats redesign v2 — set like print</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1c1c1e; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; padding:40px 24px; color:#fff; display:flex; flex-direction:column; align-items:center; gap:18px; }
+  h1 { font-size:16px; font-weight:600; }
+  .sub { color:#888; font-size:13px; max-width:430px; text-align:center; line-height:1.5; }
+  .phone {
+    width:390px; height:800px; border-radius:40px; overflow:hidden;
+    border:1px solid #3a3a3c; box-shadow:0 40px 100px rgba(0,0,0,0.6);
+    flex-shrink:0; margin-top:14px;
+  }
+  .screen { width:100%; height:100%; overflow-y:auto; scrollbar-width:none; background:#080808; color:#f5f5f3; padding:34px 26px 80px; }
+  .screen::-webkit-scrollbar { display:none; }
+
+  .serif { font-family:Georgia,"Times New Roman",serif; }
+  .num { font-variant-numeric:tabular-nums; }
+  .caps { font-size:9.5px; letter-spacing:0.22em; text-transform:uppercase; font-weight:600; color:rgba(245,245,243,0.38); }
+
+  /* ── header ── */
+  .rh { display:flex; justify-content:space-between; align-items:baseline; }
+  .rh-title { font-family:Georgia,serif; font-size:19px; font-style:italic; color:rgba(245,245,243,0.92); letter-spacing:0; }
+  .years { display:flex; gap:16px; }
+  .year { font-size:11px; font-weight:500; color:rgba(245,245,243,0.3); cursor:pointer; }
+  .year.active { color:#f5f5f3; }
+  .double-rule { border-top:1px solid rgba(255,255,255,0.35); border-bottom:1px solid rgba(255,255,255,0.12); height:3px; margin:16px 0 0; }
+
+  /* ── opening figure ── */
+  .opening { padding:36px 0 30px; border-bottom:1px solid rgba(255,255,255,0.09); }
+  .open-num { font-family:Georgia,serif; font-size:96px; line-height:0.9; color:#f5f5f3; }
+  .open-caption { font-size:13px; color:rgba(245,245,243,0.45); margin-top:14px; line-height:1.65; max-width:300px; }
+  .open-caption i { font-family:Georgia,serif; color:rgba(245,245,243,0.8); }
+
+  /* ── leader rows (table-of-contents style) ── */
+  .tbl { padding:26px 0; border-bottom:1px solid rgba(255,255,255,0.09); }
+  .tbl .caps { display:block; margin-bottom:16px; }
+  .lrow { display:flex; align-items:baseline; gap:8px; padding:7px 0; }
+  .lrow .name { font-size:13.5px; color:rgba(245,245,243,0.8); letter-spacing:-0.01em; flex-shrink:0; }
+  .lrow .leader { flex:1; border-bottom:1px dotted rgba(255,255,255,0.18); transform:translateY(-3px); }
+  .lrow .val { font-family:Georgia,serif; font-size:15px; color:#f5f5f3; flex-shrink:0; }
+  .lrow .pct { font-size:11px; color:rgba(245,245,243,0.35); width:38px; text-align:right; flex-shrink:0; }
+
+  /* ── hit rate ── */
+  .hit { padding:28px 0; border-bottom:1px solid rgba(255,255,255,0.09); display:flex; align-items:baseline; justify-content:space-between; }
+  .hit-num { font-family:Georgia,serif; font-size:58px; line-height:1; color:#d4a843; }
+  .hit-text { font-size:12.5px; color:rgba(245,245,243,0.45); text-align:right; line-height:1.65; }
+  .hit-text b { color:rgba(245,245,243,0.85); font-weight:600; }
+
+  /* ── rhythm ── */
+  .rhythm-wrap { padding:28px 0; border-bottom:1px solid rgba(255,255,255,0.09); }
+  .rhythm-wrap .caps { display:block; margin-bottom:18px; }
+  .rhythm { display:flex; align-items:flex-end; gap:6px; height:54px; margin-bottom:8px; }
+  .rhythm .m { flex:1; display:flex; flex-direction:column; gap:7px; height:100%; }
+  .rhythm .bw { flex:1; display:flex; align-items:flex-end; }
+  .rhythm .bar { width:100%; background:rgba(245,245,243,0.16); }
+  .rhythm .bar.peak { background:#f5f5f3; }
+  .rhythm .lbl { font-size:8px; color:rgba(245,245,243,0.28); font-weight:500; text-align:center; }
+  .rhythm-cap { font-size:12.5px; color:rgba(245,245,243,0.45); line-height:1.65; margin-top:10px; }
+  .rhythm-cap i { font-family:Georgia,serif; color:rgba(245,245,243,0.8); }
+
+  /* ── footnotes ── */
+  .foot { padding:26px 0 0; }
+  .foot .caps { display:block; margin-bottom:14px; }
+  .fn { display:flex; gap:10px; padding:6px 0; font-size:12.5px; line-height:1.65; color:rgba(245,245,243,0.45); }
+  .fn .no { font-family:Georgia,serif; font-size:11px; color:rgba(245,245,243,0.3); flex-shrink:0; padding-top:1px; }
+  .fn b { color:rgba(245,245,243,0.85); font-weight:600; }
+
+  .deep { margin-top:34px; font-size:12px; color:rgba(245,245,243,0.35); display:flex; justify-content:space-between; align-items:baseline; cursor:pointer; padding-top:18px; border-top:1px solid rgba(255,255,255,0.09); }
+  .deep u { text-decoration-color:rgba(255,255,255,0.25); text-underline-offset:3px; }
+</style>
+</head>
+<body>
+
+<h1>Stats v2 — set like print</h1>
+<div class="sub">No colored bars, no dots, no glows, no legends. Serif numerals, dotted leaders, hairline rules. Exactly one gold number on the page. Reads like the back page of a magazine, not a dashboard.</div>
+
+<div class="phone"><div class="screen">
+
+  <!-- header -->
+  <div class="rh">
+    <div class="rh-title">In review</div>
+    <div class="years">
+      <div class="year active num">2026</div>
+      <div class="year num">2025</div>
+      <div class="year">All</div>
+    </div>
+  </div>
+  <div class="double-rule"></div>
+
+  <!-- opening figure -->
+  <div class="opening">
+    <div class="open-num num">47</div>
+    <div class="open-caption">things logged this year — <i>nine more</i> than this time last year. Mostly films, mostly loved.</div>
+  </div>
+
+  <!-- by category -->
+  <div class="tbl">
+    <span class="caps">By category</span>
+    <div class="lrow"><span class="name">Watched</span><span class="leader"></span><span class="pct num">45%</span><span class="val num">21</span></div>
+    <div class="lrow"><span class="name">Read</span><span class="leader"></span><span class="pct num">19%</span><span class="val num">9</span></div>
+    <div class="lrow"><span class="name">Experienced</span><span class="leader"></span><span class="pct num">19%</span><span class="val num">9</span></div>
+    <div class="lrow"><span class="name">Listened</span><span class="leader"></span><span class="pct num">17%</span><span class="val num">8</span></div>
+  </div>
+
+  <!-- verdicts -->
+  <div class="tbl">
+    <span class="caps">By verdict</span>
+    <div class="lrow"><span class="name">Loved</span><span class="leader"></span><span class="pct num">38%</span><span class="val num">18</span></div>
+    <div class="lrow"><span class="name">Liked</span><span class="leader"></span><span class="pct num">45%</span><span class="val num">21</span></div>
+    <div class="lrow"><span class="name">Meh</span><span class="leader"></span><span class="pct num">11%</span><span class="val num">5</span></div>
+    <div class="lrow"><span class="name">Didn't like</span><span class="leader"></span><span class="pct num">6%</span><span class="val num">3</span></div>
+  </div>
+
+  <!-- hit rate -->
+  <div class="hit">
+    <div class="hit-num num">83%</div>
+    <div class="hit-text">hit rate —<br><b>39 of 47</b> loved or liked</div>
+  </div>
+
+  <!-- rhythm -->
+  <div class="rhythm-wrap">
+    <span class="caps">Rhythm</span>
+    <div class="rhythm">
+      <div class="m"><div class="bw"><div class="bar" style="height:22%"></div></div><div class="lbl">J</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:35%"></div></div><div class="lbl">A</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:18%"></div></div><div class="lbl">S</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:42%"></div></div><div class="lbl">O</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:30%"></div></div><div class="lbl">N</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:55%"></div></div><div class="lbl">D</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:38%"></div></div><div class="lbl">J</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:25%"></div></div><div class="lbl">F</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:48%"></div></div><div class="lbl">M</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:60%"></div></div><div class="lbl">A</div></div>
+      <div class="m"><div class="bw"><div class="bar" style="height:44%"></div></div><div class="lbl">M</div></div>
+      <div class="m"><div class="bw"><div class="bar peak" style="height:100%"></div></div><div class="lbl">J</div></div>
+    </div>
+    <div class="rhythm-cap"><i>June was the peak</i> — fourteen things in one month.</div>
+  </div>
+
+  <!-- footnotes -->
+  <div class="foot">
+    <span class="caps">Footnotes</span>
+    <div class="fn"><span class="no">1</span><div>Most logged creator: <b>Christopher Nolan</b>, five entries.</div></div>
+    <div class="fn"><span class="no">2</span><div>Safest bet: <b>Experienced</b> — 89% loved or liked.</div></div>
+    <div class="fn"><span class="no">3</span><div>Harshest on: <b>albums</b> — half missed the mark.</div></div>
+    <div class="fn"><span class="no">4</span><div>Three entries revisited; <b>two verdicts changed</b> with time.</div></div>
+  </div>
+
+  <!-- deep dive -->
+  <div class="deep">
+    <span><u>Deep dive</u> — genome, radar, heatmap, DNA, oracle</span>
+    <span>▾</span>
+  </div>
+
+</div></div>
+
+</body>
+</html>

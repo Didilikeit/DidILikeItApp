@@ -40,7 +40,7 @@ export const useLogs = () => {
     const entry = {
       ...logData,
       ...(logData.manualDate
-        ? { logged_at: new Date(logData.manualDate).toISOString() }
+        ? { logged_at: new Date(logData.manualDate + "T12:00:00").toISOString() }
         : isFinished ? { logged_at: new Date().toISOString() } : {}
       ),
     };
@@ -48,7 +48,7 @@ export const useLogs = () => {
 
     if (user) {
       if (editingId) {
-        const { error } = await supabase.from("logs").update(entry).eq("id", editingId);
+        const { error } = await supabase.from("logs").update(entry).eq("id", editingId).eq("user_id", user.id);
         if (error) throw error;
         await fetchLogs(user);
         return editingId;
@@ -88,7 +88,7 @@ export const useLogs = () => {
     });
 
     if (user) {
-      const { error } = await supabase.from("logs").delete().eq("id", id);
+      const { error } = await supabase.from("logs").delete().eq("id", id).eq("user_id", user.id);
       if (error) {
         // Revert optimistic removal — refetch authoritative state
         console.error("Failed to delete log:", error);
@@ -100,12 +100,37 @@ export const useLogs = () => {
     }
   }, [fetchLogs]);
 
+  // Append a dated revisit (new verdict + thoughts) without erasing history.
+  // The log's main verdict becomes the latest opinion; the full timeline lives
+  // in log.revisits — the original verdict is snapshotted in on first revisit.
+  const addRevisit = useCallback(async (log, { verdict, thoughts }, user) => {
+    const prior = Array.isArray(log.revisits) && log.revisits.length > 0
+      ? log.revisits
+      : [{ date: log.logged_at, verdict: log.verdict, thoughts: "" }];
+    const next = [...prior, { date: new Date().toISOString(), verdict, thoughts: thoughts?.trim() || "" }];
+
+    // Optimistically update state
+    setLogs(prev => prev.map(l => l.id === log.id ? { ...l, verdict, revisits: next } : l));
+
+    if (user) {
+      const { error } = await supabase.from("logs").update({ verdict, revisits: next }).eq("id", log.id).eq("user_id", user.id);
+      if (error) {
+        // Revert: refetch authoritative state
+        console.error("Failed to save revisit:", error);
+        await fetchLogs(user);
+        throw error;
+      }
+    } else {
+      writeGuestLogs(readGuestLogs().map(l => l.id === log.id ? { ...l, verdict, revisits: next } : l));
+    }
+  }, [fetchLogs]);
+
   const updateNotes = useCallback(async (id, newNotes, user) => {
     // Optimistically update state
     setLogs(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));
 
     if (user) {
-      const { error } = await supabase.from("logs").update({ notes: newNotes }).eq("id", id);
+      const { error } = await supabase.from("logs").update({ notes: newNotes }).eq("id", id).eq("user_id", user.id);
       if (error) {
         // Revert: refetch authoritative state
         console.error("Failed to update notes:", error);
@@ -136,5 +161,5 @@ export const useLogs = () => {
     });
   }, []);
 
-  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink };
+  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, links, addLink, removeLink };
 };

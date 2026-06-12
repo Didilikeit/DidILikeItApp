@@ -182,7 +182,7 @@ export const getInsight = (logs, customName) => {
 
   // ── TASTE PERSONALITY ──
   if (finished.length >= 5) {
-    if (hitRate >= 80) insights.push(`${name} you're an enthusiast — ${hitRate}% of what you log, you've liked or loved.`);
+    if (hitRate >= 80) insights.push(`${name} you're an enthusiast: ${hitRate}% of what you log, you've liked or loved.`);
     else if (hitRate >= 60) insights.push(`${hitRate}% hit rate. You've got decent instincts.`);
     else if (hitRate < 40) insights.push(`Only ${hitRate}% hit rate. You're a tough crowd.`);
     else insights.push(`${hitRate}% of everything logged has been worth it.`);
@@ -192,7 +192,7 @@ export const getInsight = (logs, customName) => {
   if (meh.length > loved.length + liked.length) insights.push(`A lot of meh. You might need better recommendations.`);
 
   // ── STREAK & HABIT ──
-  if (daysSince === 0) insights.push("You logged something today — keep it going.");
+  if (daysSince === 0) insights.push("You logged something today: keep it going.");
   else if (daysSince === 1) insights.push("Last logged yesterday. What's next?");
   else if (daysSince >= 14 && daysSince < 30) insights.push(`It's been ${daysSince} days since your last log. Something must have caught your eye?`);
   else if (daysSince >= 30) insights.push(`${daysSince} days since your last entry. Welcome back.`);
@@ -217,7 +217,7 @@ export const getInsight = (logs, customName) => {
     insights.push(`You've read more than you've watched. Old school.`);
   }
   if (byCat.Listened >= 5) insights.push(`${byCat.Listened} albums logged. Music matters to you.`);
-  if (expLogs.length >= 3) insights.push(`${expLogs.length} real-world experiences logged — not just a couch critic.`);
+  if (expLogs.length >= 3) insights.push(`${expLogs.length} real-world experiences logged: not just a couch critic.`);
   if (expLogs.length >= 10) insights.push(`${expLogs.length} experiences out in the world. You get out.`);
 
   // ── CURIOSITY / DISCOVERY ──
@@ -225,9 +225,9 @@ export const getInsight = (logs, customName) => {
   if (topCreator && topCreator[1] >= 5) insights.push(`You keep coming back to ${topCreator[0]}.`);
   if (topGenre && topGenre[1] >= 3) insights.push(`${topGenre[0]} is your most logged genre.`);
   if (topCat && topCat[1] >= 3) insights.push(`${topCat[0]} is where you spend most of your time.`);
-  if (loved.length >= 10) insights.push(`${loved.length} things you've truly loved — that's a proper list.`);
+  if (loved.length >= 10) insights.push(`${loved.length} things you've truly loved: that's a proper list.`);
   else if (loved.length > 0) insights.push(`${loved.length} thing${loved.length===1?"":"s"} you've truly loved.`);
-  if (lastLoved && daysSince <= 3) insights.push(`"${lastLoved.title}" — glad that one landed.`);
+  if (lastLoved && daysSince <= 3) insights.push(`"${lastLoved.title}": glad that one landed.`);
   if (finished.length >= 50) insights.push(`${finished.length} entries. This is a proper archive now.`);
   else if (finished.length >= 20) insights.push(`${finished.length} things logged and counted.`);
 

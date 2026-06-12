@@ -84,13 +84,13 @@ const computeTaste = (logs, yearFilter) => {
   const lovedCount = finished.filter(l=>l.verdict==="I loved it").length;
 
   if (topCat && topCat[1].total > 0)
-    oracle.push(`You are, above all else, a **${topCat[0].toLowerCase()} person** — it's where you spend most of your cultural life.`);
+    oracle.push(`You are, above all else, a **${topCat[0].toLowerCase()} person**: it's where you spend most of your cultural life.`);
   if (bestCat && bestCat.rate >= 70)
-    oracle.push(`**${bestCat.k}** is your sweet spot — a ${bestCat.rate}% hit rate says your taste is sharp here.`);
+    oracle.push(`**${bestCat.k}** is your sweet spot: a ${bestCat.rate}% hit rate says your taste is sharp here.`);
   if (worstCat && worstCat.rate < 55 && worstCat.k !== bestCat?.k)
     oracle.push(`**${worstCat.k}** is where your instincts falter most. Only ${worstCat.rate}% land.`);
   if (topCreatorEntry && topCreatorEntry[1] >= 3)
-    oracle.push(`You keep returning to **${topCreatorEntry[0]}**. ${topCreatorEntry[1]} entries — that's not a coincidence.`);
+    oracle.push(`You keep returning to **${topCreatorEntry[0]}**. ${topCreatorEntry[1]} entries: that's not a coincidence.`);
   if (topGenreEntry && topGenreEntry[1] >= 3)
     oracle.push(`**${topGenreEntry[0]}** shows up more than anything else in your log. It tells a story about you.`);
   if (hitRate >= 80)

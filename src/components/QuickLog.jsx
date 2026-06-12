@@ -45,6 +45,7 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
   const [genre, setGenre] = useState("");
   const [verdict, setVerdict] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showAllTypes, setShowAllTypes] = useState(false);
   const inputRef = useRef(null);
   const inputWrapperRef = useRef(null); // FIX: used to position results above input
@@ -81,17 +82,24 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
   const handleVerdictSelect = async (v) => {
     setVerdict(v);
     setSaving(true);
-    await onSave({
-      title: title.trim(),
-      creator: creator.trim(),
-      artwork: artwork || null,
-      year_released: year || null,
-      genre: genre || null,
-      media_type: mediaType,
-      verdict: v,
-    });
-    setSaving(false);
-    setStep("done");
+    setSaveError("");
+    try {
+      await onSave({
+        title: title.trim(),
+        creator: creator.trim(),
+        artwork: artwork || null,
+        year_released: year || null,
+        genre: genre || null,
+        media_type: mediaType,
+        verdict: v,
+      });
+      setStep("done");
+    } catch (err) {
+      console.error("Quick log save failed:", err);
+      setSaveError("Could not save: please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const ss = mediaType ? getSubtypeStyle(mediaType) : null;
@@ -285,6 +293,12 @@ export const QuickLog = ({ theme, darkMode, onSave, onClose, onExpandFull }) => 
                 <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.7, marginTop: 2 }}>Save to your wishlist</div>
               </div>
             </button>
+
+            {saveError && (
+              <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(231,76,60,0.4)", background: darkMode ? "rgba(231,76,60,0.12)" : "#ffebee", color: darkMode ? "#e57373" : "#c62828", fontSize: 12.5, fontWeight: 600 }}>
+                {saveError}
+              </div>
+            )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <div style={{ flex: 1, height: 1, background: theme.border }}/>

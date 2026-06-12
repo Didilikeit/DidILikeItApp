@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { supabase, fetchCollections, createCollection, updateCollection, deleteCollection as deleteCollectionFromDB, mergeGuestCollections } from "./utils/supabase.js";
 import { CATEGORIES, COLL_EMOJIS, API_TYPES, CREATOR_LABELS, PROGRESS_CONFIG } from "./utils/constants.js";
 import { buildTheme, getVerdictStyle } from "./utils/theme.js";
-import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getGreeting, getInsight } from "./utils/helpers.js";
+import { getCat, getSubtypeStyle, collAccent, compressImage, geocodeVenue, filterLogs, exportCSV, getInsight } from "./utils/helpers.js";
 import { useLogs } from "./hooks/useLogs.js";
 import { useApiSearch } from "./hooks/useApiSearch.js";
 import { EditorialFeed } from "./components/EditorialCard.jsx";
 import { GridFeed, ViewToggle } from "./components/GridFeed.jsx";
 import { TasteGenome, TasteRadar, TasteOracle } from "./components/TasteIntelligence.jsx";
 import { BedsideQueue } from "./components/BedsideQueue.jsx";
-import { QueueCard } from "./components/QueueCard.jsx";
 import { ActivityCalendar } from "./components/ActivityCalendar.jsx";
 import { GenreDNA } from "./components/GenreDNA.jsx";
 import { MapTab } from "./components/MapTab.jsx";
@@ -31,7 +30,7 @@ export default function App() {
   const [appError, setAppError] = useState("");
 
   // ── Data ──
-  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, links, addLink, removeLink } = useLogs();
+  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, links, addLink, removeLink } = useLogs();
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [lastQuickLogEntry, setLastQuickLogEntry] = useState(null);
   const [collections, setCollections] = useState([]);
@@ -103,8 +102,14 @@ export default function App() {
 
   // ── Stats ──
   const [statYearFilter, setStatYearFilter] = useState(new Date().getFullYear().toString());
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [deepDiveOpen, setDeepDiveOpen] = useState(false);
   const [customName, setCustomName] = useState(localStorage.getItem("user_custom_name") || "");
-  const [isEditingName, setIsEditingName] = useState(false);
+
+  // ── Revisit (verdict aging) ──
+  const [revisitLog, setRevisitLog] = useState(null);
+  const [revisitVerdict, setRevisitVerdict] = useState("");
+  const [revisitThoughts, setRevisitThoughts] = useState("");
 
   // ── Undo ──
   const [undoItem, setUndoItem] = useState(null);
@@ -410,11 +415,13 @@ export default function App() {
     Object.keys(CATEGORIES).forEach(c => { cats[c] = { total: 0, loved: 0, liked: 0, meh: 0, no: 0 }; });
     cats.active = 0; cats.queue = 0;
     logs.forEach(log => {
-      if (statYearFilter !== "All" && new Date(log.logged_at).getFullYear().toString() !== statYearFilter) return;
       const v = log.verdict, cat = getCat(log.media_type);
-      if (v?.startsWith("Currently")) cats.active++;
-      else if (v?.startsWith("Want to") || v === "Want to go") cats.queue++;
-      else if (cats[cat]) {
+      // In-progress and queue describe the current state of the shelf, so they
+      // are never year-filtered; only finished verdicts respect the year filter.
+      if (v?.startsWith("Currently")) { cats.active++; return; }
+      if (v?.startsWith("Want to") || v === "Want to go") { cats.queue++; return; }
+      if (statYearFilter !== "All" && new Date(log.logged_at).getFullYear().toString() !== statYearFilter) return;
+      if (cats[cat]) {
         cats[cat].total++;
         if (v === "I loved it") cats[cat].loved++;
         else if (v === "I liked it") cats[cat].liked++;
@@ -559,7 +566,14 @@ export default function App() {
     const item = logs.find(l => l.id === id);
     if (!item) return;
     // Optimistic UI — remove immediately, allow undo
-    deleteLog(id, user);
+    deleteLog(id, user).catch(err => {
+      console.error("Delete failed:", err);
+      // deleteLog already reverted the optimistic removal via fetchLogs.
+      // Clear the undo toast so the user can't re-insert what's already back.
+      clearTimeout(undoTimerRef.current);
+      setUndoItem(null);
+      setAppError("Could not delete entry: please try again.");
+    });
     setUndoItem(item);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setUndoItem(null), 5000);
@@ -626,9 +640,9 @@ export default function App() {
       collection_id: null,
       year_released: logData.year_released || null,
     };
-    await saveLog({ logData: entry, editingId: null, user, verdict: logData.verdict });
-    // Find the newly created entry so "Add more detail" can jump to it
-    setLastQuickLogEntry({ ...entry, id: "latest" });
+    const savedId = await saveLog({ logData: entry, editingId: null, user, verdict: logData.verdict });
+    // Store the returned ID so onExpandFull can open the exact entry, not just logs[0]
+    setLastQuickLogEntry({ ...entry, id: savedId || "latest" });
   };
 
   // Collection actions
@@ -650,9 +664,13 @@ export default function App() {
       const tempId = "temp_" + Date.now();
       setCollections(prev => [...prev, { id: tempId, name, emoji, desc, created_at: new Date().toISOString() }]);
       const created = await createCollection(user, { name, emoji, desc });
-      // Replace temp entry with real one from Supabase (has correct UUID)
       if (created) {
+        // Replace temp entry with the real Supabase row (correct UUID)
         setCollections(prev => prev.map(c => c.id === tempId ? { ...created, desc: created.description ?? desc } : c));
+      } else {
+        // DB write failed — remove the optimistic entry so no stale temp ID lingers
+        setCollections(prev => prev.filter(c => c.id !== tempId));
+        setAppError("Could not create collection: please try again.");
       }
     }
   };
@@ -663,7 +681,19 @@ export default function App() {
     if (user) await fetchLogs(user); else fetchLogs(null);
   };
   const openEditColl = c => { setEditingColl(c.id); setCollName(c.name); setCollEmoji(c.emoji || "🗂"); setCollDesc(c.desc || ""); setShowCollModal(true); };
-  const saveName = () => { localStorage.setItem("user_custom_name", customName.trim()); setIsEditingName(false); };
+  const saveName = () => { localStorage.setItem("user_custom_name", customName.trim()); };
+
+  // ── Revisit handlers ──
+  const openRevisit = log => { setRevisitLog(log); setRevisitVerdict(log.verdict); setRevisitThoughts(""); };
+  const closeRevisit = () => { setRevisitLog(null); setRevisitVerdict(""); setRevisitThoughts(""); };
+  const saveRevisit = () => {
+    if (!revisitLog || !revisitVerdict) return;
+    addRevisit(revisitLog, { verdict: revisitVerdict, thoughts: revisitThoughts }, user).catch(err => {
+      console.error("Revisit failed:", err);
+      setAppError("Could not save revisit: please try again.");
+    });
+    closeRevisit();
+  };
 
   // ── Styles ──
   const inputStyle = {
@@ -737,80 +767,147 @@ export default function App() {
       const k = d.toLocaleString("default", { month:"long", year:"numeric" });
       return { key: k, label: d.toLocaleString("default", { month:"short" })[0], count: monthCount[k] || 0 };
     });
-    const card = { background:theme.card, border:`1px solid ${theme.border}`, borderRadius:"16px", padding:"16px" };
-    const greeting = getGreeting();
-    const firstName = customName ? customName.split(" ")[0] : null;
     const insight = getInsight(logs, customName);
-    const recentLogs = logs.filter(l => ["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict)).slice(0, 3);
+    const recentLogs = logs.filter(l => ["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict)).slice(0, 10);
+
+    // ── Shelf design tokens ──
+    const currentLogs = logs.filter(l => l.verdict?.startsWith("Currently")).slice(0, 10);
+    const queueLogs = logs.filter(l => l.verdict?.startsWith("Want to") || l.verdict === "Want to go").slice(0, 10);
+    const progressInfo = l => {
+      const cp = Number(l.current_page), tp = Number(l.total_pages);
+      const ce = Number(l.current_episode), te = Number(l.total_episodes);
+      if (cp > 0 && tp > 0) return { pct: Math.min(100, Math.round((cp/tp)*100)), label:`Page ${cp} of ${tp}` };
+      if (ce > 0 && te > 0) return { pct: Math.min(100, Math.round((ce/te)*100)), label: l.current_season ? `S${l.current_season} · Ep ${ce} of ${te}` : `Ep ${ce} of ${te}` };
+      if (cp > 0) return { pct: null, label:`Page ${cp}` };
+      if (ce > 0) return { pct: null, label: l.current_season ? `S${l.current_season} · Ep ${ce}` : `Ep ${ce}` };
+      return null;
+    };
+    const heroArt = recentLogs.find(l => l.artwork)?.artwork || null;
+    const totalLogged = Object.keys(CATEGORIES).reduce((s,k) => s+(stats[k]?.total||0), 0);
+    const yearLabel = statYearFilter === "All" ? "all time" : `in ${statYearFilter}`;
+    const todayLabel = new Date().toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
+    const heroText = darkMode ? "#f5f5f3" : "#141414";
+    const heroDim = darkMode ? "rgba(245,245,243,0.55)" : "rgba(20,20,20,0.55)";
+    const fadeRGB = darkMode ? "8,8,8" : "242,242,242";
+    const SHELF_VERDICTS = {
+      "I loved it":       { label:"Loved",    dot:"#d4a843", gold:true },
+      "I liked it":       { label:"Liked",    dot:"#7da06b" },
+      "Meh":              { label:"Meh",      dot:"#8a8a8a" },
+      "I didn't like it": { label:"Disliked", dot:"#b05c5c" },
+    };
+
+    // ── "In review" print report tokens & numbers ──
+    const serif = "Georgia, 'Times New Roman', serif";
+    const inkHi   = darkMode ? "rgba(245,245,243,0.92)" : "rgba(20,20,20,0.92)";
+    const inkBody = darkMode ? "rgba(245,245,243,0.8)"  : "rgba(20,20,20,0.8)";
+    const inkMid  = darkMode ? "rgba(245,245,243,0.45)" : "rgba(20,20,20,0.5)";
+    const inkLow  = darkMode ? "rgba(245,245,243,0.3)"  : "rgba(20,20,20,0.35)";
+    const dotted  = darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.22)";
+    const capsStyle = { fontSize:"9.5px", letterSpacing:"0.22em", textTransform:"uppercase", fontWeight:"600", color:inkLow };
+    const yearTabs = [...availableYears.filter(y => y !== "All"), "All"];
+    const verdictTotals = Object.keys(CATEGORIES).reduce((acc, c) => {
+      const s = stats[c] || {};
+      acc.loved += s.loved||0; acc.liked += s.liked||0; acc.meh += s.meh||0; acc.no += s.no||0;
+      return acc;
+    }, { loved:0, liked:0, meh:0, no:0 });
+    const pctOf = n => totalLogged > 0 ? Math.round((n/totalLogged)*100) : 0;
+    const catRows = Object.keys(CATEGORIES).map(cat => ({ cat, total: stats[cat]?.total||0 })).sort((a,b) => b.total-a.total);
+    const catHit = cat => { const s = stats[cat]; return s && s.total > 0 ? Math.round(((s.loved+s.liked)/s.total)*100) : null; };
+    const qualifying = catRows.filter(r => r.total >= 3);
+    const safest = qualifying.length > 0 ? qualifying.reduce((a,b) => catHit(b.cat) > catHit(a.cat) ? b : a) : null;
+    const harshest = qualifying.length > 1 ? qualifying.reduce((a,b) => catHit(b.cat) < catHit(a.cat) ? b : a) : null;
+    const revisitedLogs = logs.filter(l => Array.isArray(l.revisits) && l.revisits.length > 1);
+    const verdictsChanged = revisitedLogs.filter(l => l.revisits[0]?.verdict !== l.revisits[l.revisits.length-1]?.verdict).length;
+    const nowD = new Date();
+    let deltaText = "";
+    if (statYearFilter === nowD.getFullYear().toString()) {
+      const cutoff = new Date(nowD); cutoff.setFullYear(nowD.getFullYear()-1);
+      const prevCount = logs.filter(l => {
+        if (!["I loved it","I liked it","Meh","I didn't like it"].includes(l.verdict)) return false;
+        const d = new Date(l.logged_at);
+        return d.getFullYear() === nowD.getFullYear()-1 && d <= cutoff;
+      }).length;
+      if (prevCount > 0) {
+        const diff = totalLogged - prevCount;
+        deltaText = diff > 0 ? `${diff} more than this time last year`
+          : diff < 0 ? `${Math.abs(diff)} fewer than this time last year`
+          : "level with this time last year";
+      }
+    }
+    const openCaption = statYearFilter === "All" ? "things logged all time"
+      : statYearFilter === nowD.getFullYear().toString() ? "things logged this year"
+      : `things logged in ${statYearFilter}`;
+    const footnotes = [];
+    if (topCreator) footnotes.push(<>Most logged creator: <b style={{ color:inkHi, fontWeight:"600" }}>{topCreator.name}</b>, {topCreator.count} {topCreator.count === 1 ? "entry" : "entries"}.</>);
+    if (safest && catHit(safest.cat) != null) footnotes.push(<>Safest bet: <b style={{ color:inkHi, fontWeight:"600" }}>{safest.cat}</b>: {catHit(safest.cat)}% loved or liked.</>);
+    if (harshest && harshest.cat !== safest?.cat) footnotes.push(<>Harshest on: <b style={{ color:inkHi, fontWeight:"600" }}>{harshest.cat}</b>: {catHit(harshest.cat)}% loved or liked.</>);
+    if (revisitedLogs.length > 0) footnotes.push(<>{revisitedLogs.length} {revisitedLogs.length === 1 ? "entry" : "entries"} revisited; <b style={{ color:inkHi, fontWeight:"600" }}>{verdictsChanged} {verdictsChanged === 1 ? "verdict" : "verdicts"} changed</b> with time.</>);
+    const LeaderRow = ({ label, pct, val, onClick }) => (
+      <div onClick={onClick} style={{ display:"flex", alignItems:"baseline", gap:"8px", padding:"7px 0", cursor:"pointer" }}>
+        <span style={{ fontSize:"13.5px", color:inkBody, letterSpacing:"-0.01em", flexShrink:0 }}>{label}</span>
+        <span style={{ flex:1, borderBottom:`1px dotted ${dotted}`, transform:"translateY(-3px)" }}/>
+        <span style={{ fontSize:"11px", color:inkLow, width:"38px", textAlign:"right", flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{pct}%</span>
+        <span style={{ fontFamily:serif, fontSize:"15px", color:heroText, flexShrink:0, fontVariantNumeric:"tabular-nums", minWidth:"26px", textAlign:"right" }}>{val}</span>
+      </div>
+    );
 
     return (
       <div style={{ padding:"0 0 100px" }}>
         {/* ── HERO ── */}
-        <div style={{ padding:"20px 16px 0", marginBottom:"16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"16px" }}>
-            <div style={{ flex:1 }}>
-              {isEditingName ? (
-                <form onSubmit={e => { e.preventDefault(); saveName(); }} style={{ display:"flex", gap:"6px", alignItems:"center" }}>
-                  <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="Your name…" autoFocus style={{ ...inputStyle, width:"140px", padding:"7px 10px", fontSize:"14px", marginBottom:0 }}/>
-                  <button type="submit" style={{ background:"none", border:"none", color:"#27ae60", fontSize:"18px", cursor:"pointer" }}>✅</button>
-                </form>
-              ) : (
-                <div>
-                  <div style={{ fontSize:"13px", color:theme.subtext, marginBottom:"2px" }}>{greeting}{firstName ? `, ${firstName}` : ""}</div>
-                  <div style={{ fontSize:"22px", fontWeight:"800", letterSpacing:"-0.5px", color:theme.text, lineHeight:"1.2" }}>
-                    Did I Like It<span style={{ color:"#3498db" }}>?</span>
-                    <button onClick={() => setIsEditingName(true)} style={{ background:"none", border:"none", cursor:"pointer", marginLeft:"6px", fontSize:"12px", opacity:0.4 }}>✏️</button>
-                  </div>
-                </div>
-              )}
+        <div style={{ position:"relative", overflow:"hidden", padding:"34px 22px 32px", marginBottom:"4px" }}>
+          {heroArt ? (
+            <img src={heroArt} alt="" aria-hidden="true" style={{ position:"absolute", top:"-30%", left:"-15%", width:"130%", height:"150%", objectFit:"cover", filter:"blur(48px) saturate(1.2)", opacity:darkMode ? 0.45 : 0.4, transform:"translateZ(0)", pointerEvents:"none" }}/>
+          ) : (
+            <div style={{ position:"absolute", inset:"-60px", background:"radial-gradient(ellipse 70% 55% at 75% 8%, rgba(196,138,63,0.45), transparent 60%), radial-gradient(ellipse 60% 45% at 15% 22%, rgba(96,58,38,0.5), transparent 65%)", filter:"blur(30px)", pointerEvents:"none" }}/>
+          )}
+          <div style={{ position:"absolute", inset:0, background:`linear-gradient(180deg, rgba(${fadeRGB},0.08) 0%, rgba(${fadeRGB},0.5) 55%, rgba(${fadeRGB},0.92) 88%, ${theme.bg} 100%)`, pointerEvents:"none" }}/>
+          <div style={{ position:"relative" }}>
+            <div style={{ fontSize:"10.5px", letterSpacing:"0.22em", textTransform:"uppercase", color:heroDim, fontWeight:"600", marginBottom:"12px" }}>{todayLabel}</div>
+            <div style={{ fontSize:"34px", fontWeight:"700", letterSpacing:"-0.035em", lineHeight:"1.05", color:heroText, marginBottom:"10px" }}>
+              Did I Like It<span style={{ color:"#d4a843" }}>?</span>
             </div>
-            <div style={{ display:"flex", gap:"5px", flexShrink:0 }}>
-              <button onClick={() => setActiveTab("queue")} style={{ display:"flex", alignItems:"center", gap:"4px", fontSize:"10px", fontWeight:"600", padding:"5px 9px", borderRadius:"20px", border:`1px solid ${theme.border2}`, background:"none", color:theme.subtext2, cursor:"pointer" }}>
-                <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#4fc3f7", flexShrink:0 }}/>{stats.active}
+            <div style={{ fontSize:"13.5px", color:heroDim, letterSpacing:"-0.01em", lineHeight:"1.5", marginBottom:"28px", maxWidth:"320px" }}>{insight}</div>
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button onClick={() => setShowQuickLog(true)} style={{ flex:1, padding:"16px 0", borderRadius:"100px", border:"none", textAlign:"center", fontSize:"14.5px", fontWeight:"600", letterSpacing:"-0.015em", cursor:"pointer", fontFamily:"inherit", background:darkMode ? "#f5f5f3" : "#141414", color:darkMode ? "#0a0a0a" : "#f5f5f3", boxShadow:darkMode ? "0 8px 28px rgba(0,0,0,0.45)" : "0 8px 24px rgba(0,0,0,0.2)" }}>
+                Quick log
               </button>
-              <button onClick={() => setActiveTab("queue")} style={{ display:"flex", alignItems:"center", gap:"4px", fontSize:"10px", fontWeight:"600", padding:"5px 9px", borderRadius:"20px", border:`1px solid ${theme.border2}`, background:"none", color:theme.subtext2, cursor:"pointer" }}>
-                <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#ce93d8", flexShrink:0 }}/>{stats.queue}
+              <button onClick={() => setActiveTab("log")} style={{ flex:1, padding:"16px 0", borderRadius:"100px", textAlign:"center", fontSize:"14.5px", fontWeight:"600", letterSpacing:"-0.015em", cursor:"pointer", fontFamily:"inherit", background:darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color:heroText, border:`1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.15)"}`, backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)" }}>
+                Full log
               </button>
             </div>
-          </div>
-
-          <div style={{ background:theme.card, border:`1px solid ${theme.border}`, borderRadius:"12px", padding:"12px 14px", marginBottom:"14px", display:"flex", alignItems:"flex-start", gap:"10px" }}>
-            <span style={{ fontSize:"18px", flexShrink:0, marginTop:"1px" }}>💡</span>
-            <div style={{ fontSize:"13px", color:theme.subtext2, lineHeight:"1.5", flex:1 }}>{insight}</div>
-          </div>
-
-          <div style={{ display:"flex", gap:"8px" }}>
-            <button onClick={() => setShowQuickLog(true)} style={{ flex:1, padding:"15px 10px", borderRadius:"14px", border:"none", background:"linear-gradient(135deg,#f1c40f,#e67e22)", color:"#000", fontWeight:"700", fontSize:"14px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", letterSpacing:"-0.2px", boxShadow:"0 4px 20px rgba(241,196,15,0.25)" }}>
-              <span style={{ fontSize:"18px" }}>⚡</span> Quick log
-            </button>
-            <button onClick={() => setActiveTab("log")} style={{ flex:1, padding:"15px 10px", borderRadius:"14px", border:"none", background:"linear-gradient(135deg,#3498db,#9b59b6)", color:"#fff", fontWeight:"700", fontSize:"14px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", letterSpacing:"-0.2px", boxShadow:"0 4px 20px rgba(52,152,219,0.3)" }}>
-              <span style={{ fontSize:"18px" }}>＋</span> Full log
-            </button>
           </div>
         </div>
 
-        {/* ── RECENTLY LOGGED ── */}
+        {/* ── RECENTLY LOGGED (shelf) ── */}
         {recentLogs.length > 0 && (
-          <div style={{ padding:"0 16px", marginBottom:"16px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-              <div style={{ fontSize:"11px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.1em", textTransform:"uppercase" }}>Recently logged</div>
-              <button onClick={() => setActiveTab("history")} style={{ background:"none", border:"none", color:"#3498db", fontSize:"11px", fontWeight:"600", cursor:"pointer" }}>See all →</button>
+          <div style={{ marginBottom:"6px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", padding:"8px 22px 14px" }}>
+              <div style={{ fontSize:"11px", fontWeight:"600", color:theme.subtext, letterSpacing:"0.18em", textTransform:"uppercase" }}>Recently logged</div>
+              <button onClick={() => setActiveTab("history")} style={{ background:"none", border:"none", color:theme.subtext, fontSize:"12px", fontWeight:"500", cursor:"pointer", padding:0 }}>View all</button>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-              {recentLogs.map(log => {
-                const vs2 = gvs(log.verdict);
-                const ss2 = getSubtypeStyle(log.media_type);
+            <div style={{ display:"flex", gap:"14px", overflowX:"auto", padding:"4px 22px 26px", scrollbarWidth:"none", WebkitOverflowScrolling:"touch", scrollSnapType:"x proximity" }}>
+              {recentLogs.map((log, idx) => {
+                const sv = SHELF_VERDICTS[log.verdict] || { label:"", dot:"#777" };
+                const featured = idx === 0;
+                const catColor = CATEGORIES[getCat(log.media_type)]?.color || "#888";
                 return (
                   <div key={log.id} onClick={() => { setHistoryDisplay("compact"); setActiveTab("history"); setDeepLinkOpenId(log.id); }}
-                    style={{ background:theme.card, border:`1px solid ${theme.border}`, borderRadius:"12px", padding:"10px 12px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }}>
-                    <div style={{ width:"36px", height:"50px", borderRadius:"7px", overflow:"hidden", flexShrink:0, background:darkMode?"#1a1a1a":"#eee", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      {log.artwork ? <img src={log.artwork} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e => e.target.style.display="none"}/> : <span style={{ fontSize:"18px" }}>{ss2.icon}</span>}
+                    style={{ flexShrink:0, width:featured ? "148px" : "124px", cursor:"pointer", scrollSnapAlign:"start" }}>
+                    <div style={{ position:"relative", width:"100%", aspectRatio:"2/3", borderRadius:"12px", overflow:"hidden", marginBottom:"10px", border:`1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`, boxShadow:darkMode ? "0 16px 34px rgba(0,0,0,0.55)" : "0 12px 28px rgba(0,0,0,0.16)", background:darkMode ? "#141414" : "#e8e8e8" }}>
+                      <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:`linear-gradient(160deg, ${catColor}38, ${catColor}0d)` }}>
+                        <span style={{ fontFamily:"Georgia, 'Times New Roman', serif", fontSize:featured ? "42px" : "36px", color:`${catColor}cc`, lineHeight:1 }}>{(log.title || "?").charAt(0).toUpperCase()}</span>
+                      </div>
+                      {log.artwork && <img src={log.artwork} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }} onError={e => e.target.style.display="none"}/>}
+                      <div style={{ position:"absolute", inset:0, background:"linear-gradient(165deg, rgba(255,255,255,0.10) 0%, transparent 38%)", pointerEvents:"none" }}/>
+                      {featured && (
+                        <div style={{ position:"absolute", top:"9px", left:"9px", fontSize:"9px", fontWeight:"700", letterSpacing:"0.14em", textTransform:"uppercase", color:"rgba(245,245,243,0.92)", background:"rgba(8,8,8,0.55)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", padding:"4px 8px", borderRadius:"20px", border:"1px solid rgba(255,255,255,0.14)" }}>Latest</div>
+                      )}
                     </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontWeight:"700", fontSize:"13px", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{log.title}</div>
-                      <div style={{ fontSize:"10px", color:theme.subtext, marginTop:"2px" }}>{ss2.icon} {log.media_type}{log.creator ? ` · ${log.creator}` : ""}</div>
+                    <div style={{ fontSize:featured ? "14px" : "13px", fontWeight:"600", letterSpacing:"-0.01em", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginBottom:"4px" }}>{log.title}</div>
+                    <div style={{ fontSize:"10px", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:"600", color:sv.gold ? "#d4a843" : theme.subtext, display:"flex", alignItems:"center", gap:"6px" }}>
+                      <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:sv.dot, flexShrink:0, boxShadow:sv.gold ? "0 0 8px rgba(212,168,67,0.55)" : "none" }}/>
+                      <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sv.label} · {log.media_type}</span>
                     </div>
-                    <span style={{ fontSize:"9px", fontWeight:"700", padding:"2px 7px", borderRadius:"20px", border:`1px solid ${vs2.border}`, background:vs2.bg, color:vs2.color, flexShrink:0, whiteSpace:"nowrap" }}>{vs2.emoji} {log.verdict}</span>
                   </div>
                 );
               })}
@@ -818,116 +915,170 @@ export default function App() {
           </div>
         )}
 
-        {/* ── STATS DIVIDER ── */}
-        <div style={{ padding:"0 16px", marginBottom:"14px", display:"flex", alignItems:"center", gap:"10px" }}>
-          <div style={{ height:"1px", flex:1, background:theme.border }}/>
-          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-            <span style={{ fontSize:"10px", fontWeight:"700", color:theme.subtext, letterSpacing:"0.12em", textTransform:"uppercase" }}>Stats</span>
-            <select value={statYearFilter} onChange={e => setStatYearFilter(e.target.value)}
-              style={{ background:"none", border:`1px solid ${theme.border}`, borderRadius:"20px", color:"#3498db", fontWeight:"600", fontSize:"10px", cursor:"pointer", outline:"none", padding:"3px 8px" }}>
-              {availableYears.map(y => <option key={y} value={y}>{y === "All" ? "All time" : y}</option>)}
-            </select>
-          </div>
-          <div style={{ height:"1px", flex:1, background:theme.border }}/>
-        </div>
-
-        <div style={{ padding:"0 16px" }}>
-          {/* TOTAL COUNT */}
-          <div style={{ ...card, marginBottom:"10px", position:"relative", overflow:"hidden" }}>
-            <div style={{ position:"absolute", top:0, left:0, right:0, height:"1px", background:`linear-gradient(90deg,${CATEGORIES.Watched.color},${CATEGORIES.Read.color},${CATEGORIES.Listened.color},${CATEGORIES.Experienced.color})` }}/>
-            <div style={{ display:"flex", alignItems:"flex-end", gap:"10px", marginBottom:"6px" }}>
-              <div style={{ fontSize:"56px", fontWeight:"800", lineHeight:1, letterSpacing:"-3px", color:theme.text }}>{Object.keys(CATEGORIES).reduce((s,k) => s+(stats[k]?.total||0), 0)}</div>
-              <div style={{ paddingBottom:"8px", color:theme.subtext, fontSize:"14px", lineHeight:"1.3" }}>things<br/>logged</div>
+        {/* ── ON THE GO + UP NEXT (mini shelves) ── */}
+        {[
+          { key:"current", title:"On the go", items:currentLogs },
+          { key:"upnext",  title:"Up next",   items:queueLogs },
+        ].map(sec => sec.items.length > 0 && (
+          <div key={sec.key} style={{ marginBottom:"6px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", padding:"8px 22px 14px" }}>
+              <div style={{ fontSize:"11px", fontWeight:"600", color:theme.subtext, letterSpacing:"0.18em", textTransform:"uppercase" }}>{sec.title}</div>
+              <button onClick={() => setActiveTab("queue")} style={{ background:"none", border:"none", color:theme.subtext, fontSize:"12px", fontWeight:"500", cursor:"pointer", padding:0 }}>View all</button>
             </div>
-            <div style={{ display:"flex", height:"3px", borderRadius:"3px", overflow:"hidden", gap:"2px", marginBottom:"10px" }}>
-              {Object.entries(CATEGORIES).map(([cat,def]) => { const t = stats[cat]?.total||0; return t > 0 ? <div key={cat} style={{ flex:t, background:def.color, borderRadius:"3px" }}/> : null; })}
-            </div>
-            <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
-              {Object.entries(CATEGORIES).map(([cat,def]) => (
-                <div key={cat} onClick={() => { setFilterCat(cat); setVerdictFilter(""); setActiveTab("history"); }} style={{ display:"flex", alignItems:"center", gap:"4px", cursor:"pointer" }}>
-                  <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:def.color }}/>
-                  <span style={{ fontSize:"10px", color:theme.subtext2 }}>{def.icon} {stats[cat]?.total||0}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* HIT RATE + TOP CREATOR */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"10px" }}>
-            <div style={{ ...card, position:"relative", overflow:"hidden" }}>
-              <div style={{ position:"absolute", bottom:0, left:0, right:0, height:`${hitRate}%`, background:`linear-gradient(to top,rgba(241,196,15,0.06),transparent)`, borderRadius:"0 0 16px 16px" }}/>
-              <div style={{ fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase", color:theme.subtext, fontWeight:"700", marginBottom:"6px" }}>Hit rate</div>
-              <div style={{ fontSize:"40px", fontWeight:"800", lineHeight:1, letterSpacing:"-2px", color:"#f1c40f" }}>{hitRate}%</div>
-              <div style={{ height:"2px", background:theme.border, borderRadius:"2px", overflow:"hidden", margin:"10px 0 6px" }}>
-                <div style={{ height:"100%", width:`${hitRate}%`, background:"linear-gradient(90deg,#4caf50,#f1c40f)", borderRadius:"2px" }}/>
-              </div>
-              <div style={{ fontSize:"10px", color:theme.subtext }}>loved or liked</div>
-            </div>
-            <div style={{ ...card }}>
-              <div style={{ fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase", color:theme.subtext, fontWeight:"700", marginBottom:"6px" }}>Top creator</div>
-              {topCreator ? (
-                <><div style={{ fontSize:"14px", fontWeight:"700", color:theme.text, lineHeight:"1.4", marginBottom:"4px" }}>{topCreator.name}</div><div style={{ fontSize:"10px", color:theme.subtext }}>{topCreator.count} logged</div></>
-              ) : <div style={{ fontSize:"11px", color:theme.subtext, marginTop:"8px" }}>Log more to see</div>}
-            </div>
-          </div>
-
-          {/* GENOME */}
-          <TasteGenome logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
-
-          {/* CATEGORY BREAKDOWN */}
-          <div style={{ marginBottom:"10px" }}>
-            <div style={{ fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase", color:theme.subtext, fontWeight:"700", marginBottom:"8px", paddingLeft:"2px" }}>By category</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-              {Object.entries(CATEGORIES).map(([cat, def]) => {
-                const s = stats[cat] || { total:0, loved:0, liked:0, meh:0, no:0 };
+            <div style={{ display:"flex", gap:"12px", overflowX:"auto", padding:"4px 22px 24px", scrollbarWidth:"none", WebkitOverflowScrolling:"touch", scrollSnapType:"x proximity" }}>
+              {sec.items.map(log => {
+                const catColor = CATEGORIES[getCat(log.media_type)]?.color || "#888";
+                const prog = sec.key === "current" ? progressInfo(log) : null;
                 return (
-                  <div key={cat} onClick={() => { setFilterCat(cat); setVerdictFilter(""); setActiveTab("history"); }} style={{ ...card, cursor:"pointer", padding:"12px 14px" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:"7px" }}><span style={{ fontSize:"15px" }}>{def.icon}</span><span style={{ fontSize:"13px", fontWeight:"600", color:theme.text }}>{cat}</span></div>
-                      <span style={{ fontSize:"22px", fontWeight:"800", color:def.color, letterSpacing:"-1px" }}>{s.total}</span>
-                    </div>
-                    <div style={{ display:"flex", height:"3px", borderRadius:"3px", overflow:"hidden", gap:"1px", marginBottom:"8px" }}>
-                      {s.loved>0&&<div style={{ flex:s.loved, background:"#f1c40f" }}/>}
-                      {s.liked>0&&<div style={{ flex:s.liked, background:"#4caf50" }}/>}
-                      {s.meh>0&&<div style={{ flex:s.meh, background:"#ff9800" }}/>}
-                      {s.no>0&&<div style={{ flex:s.no, background:"#e74c3c" }}/>}
-                    </div>
-                    <div style={{ display:"flex", gap:"10px" }}>
-                      {[{val:s.loved,c:"#f1c40f",l:"I loved it"},{val:s.liked,c:"#4caf50",l:"I liked it"},{val:s.meh,c:"#ff9800",l:"Meh"},{val:s.no,c:"#e74c3c",l:"I didn't like it"}].map((item,idx) => (
-                        <div key={idx} onClick={e => { e.stopPropagation(); setFilterCat(cat); setVerdictFilter(item.l); setActiveTab("history"); }} style={{ display:"flex", alignItems:"center", gap:"3px", fontSize:"10px", color:theme.subtext2, cursor:"pointer" }}>
-                          <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:item.c, flexShrink:0 }}/>{item.val}
+                  <div key={log.id} onClick={() => setActiveTab("queue")}
+                    style={{ flexShrink:0, width:"104px", cursor:"pointer", scrollSnapAlign:"start" }}>
+                    <div style={{ position:"relative", width:"100%", aspectRatio:"2/3", borderRadius:"11px", overflow:"hidden", marginBottom:"9px", border:`1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`, boxShadow:darkMode ? "0 12px 26px rgba(0,0,0,0.5)" : "0 10px 22px rgba(0,0,0,0.14)", background:darkMode ? "#141414" : "#e8e8e8" }}>
+                      <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:`linear-gradient(160deg, ${catColor}38, ${catColor}0d)` }}>
+                        <span style={{ fontFamily:"Georgia, 'Times New Roman', serif", fontSize:"30px", color:`${catColor}cc`, lineHeight:1 }}>{(log.title || "?").charAt(0).toUpperCase()}</span>
+                      </div>
+                      {log.artwork && <img src={log.artwork} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }} onError={e => e.target.style.display="none"}/>}
+                      <div style={{ position:"absolute", inset:0, background:"linear-gradient(165deg, rgba(255,255,255,0.10) 0%, transparent 38%)", pointerEvents:"none" }}/>
+                      {prog?.pct != null && (
+                        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"3px", background:"rgba(0,0,0,0.55)" }}>
+                          <div style={{ height:"100%", width:`${prog.pct}%`, background:"rgba(255,255,255,0.9)" }}/>
                         </div>
-                      ))}
+                      )}
+                    </div>
+                    <div style={{ fontSize:"12px", fontWeight:"600", letterSpacing:"-0.01em", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginBottom:"3px" }}>{log.title}</div>
+                    <div style={{ fontSize:"9.5px", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:"600", color:theme.subtext, display:"flex", alignItems:"center", gap:"5px" }}>
+                      <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:catColor, flexShrink:0 }}/>
+                      <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{prog ? prog.label : log.media_type}</span>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        ))}
 
-          {/* RADAR */}
-          <TasteRadar logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+        {/* ── QUIET STATS ── */}
+        <div style={{ margin:"0 22px", paddingTop:"24px", borderTop:`1px solid ${theme.border}` }}>
+          <div style={{ width:"28px", height:"2px", background:"#d4a843", borderRadius:"2px", marginBottom:"16px", opacity:0.85 }}/>
+          <div style={{ fontSize:"13.5px", lineHeight:"2.1", color:theme.subtext, letterSpacing:"-0.005em" }}>
+            <b style={{ color:theme.text, fontWeight:"600", fontVariantNumeric:"tabular-nums" }}>{totalLogged}</b> things logged {yearLabel} &nbsp;·&nbsp; <span style={{ color:"#d4a843", fontWeight:"600", fontVariantNumeric:"tabular-nums" }}>{hitRate}%</span> hit rate
+            {(topCreator || stats.active > 0) && <br/>}
+            {topCreator && <>Most logged: <b style={{ color:theme.text, fontWeight:"600" }}>{topCreator.name}</b></>}
+            {stats.active > 0 && (
+              <span onClick={() => setActiveTab("queue")} style={{ cursor:"pointer" }}>
+                {topCreator ? <> &nbsp;·&nbsp; </> : null}<b style={{ color:theme.text, fontWeight:"600", fontVariantNumeric:"tabular-nums" }}>{stats.active}</b> in progress
+              </span>
+            )}
+          </div>
+          <button onClick={() => setStatsOpen(v => !v)} style={{ display:"inline-flex", alignItems:"center", gap:"7px", marginTop:"18px", fontSize:"12.5px", fontWeight:"600", fontFamily:"inherit", color:theme.subtext2, border:`1px solid ${theme.border2}`, borderRadius:"100px", padding:"10px 18px", cursor:"pointer", background:darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+            {statsOpen ? "Hide stats" : "Full stats"} <span style={{ fontSize:"10px", color:theme.subtext }}>{statsOpen ? "▴" : "▾"}</span>
+          </button>
+        </div>
 
-          {/* ACTIVITY BAR CHART */}
-          <div style={{ ...card, marginBottom:"10px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"16px" }}>
-              <div>
-                <div style={{ fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase", color:theme.subtext, fontWeight:"700", marginBottom:"4px" }}>Activity</div>
-                {topMonth && <div style={{ fontSize:"14px", fontWeight:"600", color:theme.text }}>{topMonth[0]} was your peak</div>}
-              </div>
-              {topMonth && <div style={{ fontSize:"28px", fontWeight:"800", color:darkMode?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)", letterSpacing:"-1px", lineHeight:1 }}>{topMonth[1]}</div>}
-            </div>
-            <div style={{ display:"flex", alignItems:"flex-end", gap:"3px", height:"44px" }}>
-              {last12.map((m, i) => (
-                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", height:"100%" }}>
-                  <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
-                    <div style={{ width:"100%", height:`${Math.max(4,(m.count/maxMonth)*100)}%`, minHeight:"3px", borderRadius:"3px 3px 0 0", background: topMonth && m.key === topMonth[0] ? "#fff" : (darkMode?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.12)") }}/>
-                  </div>
-                  <div style={{ fontSize:"7px", color: topMonth && m.key === topMonth[0] ? theme.text : theme.subtext }}>{m.label}</div>
-                </div>
+        {/* ── STATS: IN REVIEW (print report) ── */}
+        {statsOpen && (<>
+        <div style={{ padding:"34px 26px 0" }}>
+          {/* Report header */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+            <div style={{ fontFamily:serif, fontStyle:"italic", fontSize:"19px", color:inkHi }}>In review</div>
+            <div style={{ display:"flex", gap:"16px", flexWrap:"wrap", justifyContent:"flex-end" }}>
+              {yearTabs.map(y => (
+                <button key={y} onClick={() => setStatYearFilter(y)}
+                  style={{ background:"none", border:"none", padding:0, fontSize:"11px", fontWeight:"500", fontFamily:"inherit", fontVariantNumeric:"tabular-nums", color:statYearFilter === y ? heroText : inkLow, cursor:"pointer" }}>
+                  {y}
+                </button>
               ))}
             </div>
           </div>
+          <div style={{ borderTop:`1px solid ${darkMode ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.5)"}`, borderBottom:`1px solid ${theme.border}`, height:"3px", marginTop:"16px" }}/>
+
+          {/* Opening figure */}
+          <div style={{ padding:"34px 0 28px", borderBottom:`1px solid ${theme.border}` }}>
+            <div style={{ fontFamily:serif, fontSize:"92px", lineHeight:"0.9", color:heroText, fontVariantNumeric:"tabular-nums" }}>{totalLogged}</div>
+            <div style={{ fontSize:"13px", color:inkMid, marginTop:"14px", lineHeight:"1.65", maxWidth:"300px" }}>
+              {openCaption}{deltaText ? <>: <i style={{ fontFamily:serif, color:inkHi }}>{deltaText}</i></> : null}
+            </div>
+          </div>
+
+          {/* By category */}
+          <div style={{ padding:"24px 0", borderBottom:`1px solid ${theme.border}` }}>
+            <div style={{ ...capsStyle, marginBottom:"14px" }}>By category</div>
+            {catRows.map(({ cat, total }) => (
+              <LeaderRow key={cat} label={cat} pct={pctOf(total)} val={total}
+                onClick={() => { setFilterCat(cat); setVerdictFilter(""); setActiveTab("history"); }}/>
+            ))}
+          </div>
+
+          {/* By verdict */}
+          <div style={{ padding:"24px 0", borderBottom:`1px solid ${theme.border}` }}>
+            <div style={{ ...capsStyle, marginBottom:"14px" }}>By verdict</div>
+            {[
+              { l:"Loved",       v:"I loved it",       n:verdictTotals.loved },
+              { l:"Liked",       v:"I liked it",       n:verdictTotals.liked },
+              { l:"Meh",         v:"Meh",              n:verdictTotals.meh },
+              { l:"Didn't like", v:"I didn't like it", n:verdictTotals.no },
+            ].map(row => (
+              <LeaderRow key={row.v} label={row.l} pct={pctOf(row.n)} val={row.n}
+                onClick={() => { setFilterCat("All"); setVerdictFilter(row.v); setActiveTab("history"); }}/>
+            ))}
+          </div>
+
+          {/* Hit rate */}
+          <div style={{ padding:"26px 0", borderBottom:`1px solid ${theme.border}`, display:"flex", alignItems:"baseline", justifyContent:"space-between" }}>
+            <div style={{ fontFamily:serif, fontSize:"56px", lineHeight:1, color:"#d4a843", fontVariantNumeric:"tabular-nums" }}>{hitRate}%</div>
+            <div style={{ fontSize:"12.5px", color:inkMid, textAlign:"right", lineHeight:"1.65" }}>
+              hit rate:<br/><b style={{ color:inkHi, fontWeight:"600" }}>{hitCount} of {totalLogged}</b> loved or liked
+            </div>
+          </div>
+
+          {/* Rhythm */}
+          <div style={{ padding:"26px 0", borderBottom:`1px solid ${theme.border}` }}>
+            <div style={{ ...capsStyle, marginBottom:"18px" }}>Rhythm</div>
+            <div style={{ display:"flex", alignItems:"flex-end", gap:"6px", height:"54px" }}>
+              {last12.map((m, i) => {
+                const isPeak = topMonth && m.key === topMonth[0];
+                return (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", gap:"7px", height:"100%" }}>
+                    <div style={{ flex:1, display:"flex", alignItems:"flex-end" }}>
+                      <div style={{ width:"100%", height:`${Math.max(4,(m.count/maxMonth)*100)}%`, minHeight:"2px", background:isPeak ? heroText : (darkMode ? "rgba(245,245,243,0.16)" : "rgba(20,20,20,0.16)") }}/>
+                    </div>
+                    <div style={{ fontSize:"8px", color:isPeak ? inkHi : inkLow, fontWeight:"500", textAlign:"center" }}>{m.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {topMonth && (
+              <div style={{ fontSize:"12.5px", color:inkMid, lineHeight:"1.65", marginTop:"12px" }}>
+                <i style={{ fontFamily:serif, color:inkHi }}>{topMonth[0].split(" ")[0]} was the peak</i>: {topMonth[1]} {topMonth[1] === 1 ? "thing" : "things"} in one month.
+              </div>
+            )}
+          </div>
+
+          {/* Footnotes */}
+          {footnotes.length > 0 && (
+            <div style={{ padding:"24px 0 0" }}>
+              <div style={{ ...capsStyle, marginBottom:"12px" }}>Footnotes</div>
+              {footnotes.map((fn, i) => (
+                <div key={i} style={{ display:"flex", gap:"10px", padding:"6px 0", fontSize:"12.5px", lineHeight:"1.65", color:inkMid }}>
+                  <span style={{ fontFamily:serif, fontSize:"11px", color:inkLow, flexShrink:0, paddingTop:"1px" }}>{i+1}</span>
+                  <div>{fn}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Deep dive */}
+          <div onClick={() => setDeepDiveOpen(v => !v)}
+            style={{ marginTop:"30px", paddingTop:"18px", borderTop:`1px solid ${theme.border}`, display:"flex", justifyContent:"space-between", alignItems:"baseline", cursor:"pointer", fontSize:"12px", color:inkLow }}>
+            <span><span style={{ textDecoration:"underline", textDecorationColor:dotted, textUnderlineOffset:"3px" }}>Deep dive</span>: genome, radar, heatmap, DNA, oracle</span>
+            <span>{deepDiveOpen ? "▴" : "▾"}</span>
+          </div>
+
+          {deepDiveOpen && (<div style={{ marginTop:"22px" }}>
+          {/* GENOME */}
+          <TasteGenome logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
+
+          {/* RADAR */}
+          <TasteRadar logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
 
           <div style={{ marginBottom:"10px" }}><ActivityCalendar logs={logs} theme={theme} darkMode={darkMode}/></div>
           <GenreDNA logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
@@ -936,7 +1087,9 @@ export default function App() {
           <div style={{ marginTop:"10px" }}>
             <TasteOracle logs={logs} theme={theme} darkMode={darkMode} statYearFilter={statYearFilter}/>
           </div>
+          </div>)}
         </div>
+        </>)}
       </div>
     );
   };
@@ -1367,6 +1520,7 @@ export default function App() {
                                     onEdit={log => startEdit(log)}
                                     onDelete={id => handleDelete(id)}
                                     onNotesUpdate={handleUpdateNotes}
+                                    onRevisit={openRevisit}
                                     searchTerm=""
                                   />
                                 : <div style={{ padding:"12px" }}>
@@ -1376,6 +1530,7 @@ export default function App() {
                                       searchTerm="" collections={collections}
                                       onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
                                       onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+                                      onRevisit={openRevisit}
                                     />
                                   </div>
                               }
@@ -1403,6 +1558,7 @@ export default function App() {
             onEdit={log => startEdit(log)}
             onDelete={id => handleDelete(id)}
             onNotesUpdate={handleUpdateNotes}
+            onRevisit={openRevisit}
             searchTerm={historySearch}
             deepLinkNotesId={deepLinkNotes}
             onDeepLinkConsumed={() => setDeepLinkNotes(null)}
@@ -1416,6 +1572,7 @@ export default function App() {
             searchTerm={historySearch} collections={collections}
             onMapClick={handleMapClick} onNotesUpdate={handleUpdateNotes}
             onEdit={log => startEdit(log)} onDelete={id => handleDelete(id)}
+            onRevisit={openRevisit}
             deepLinkNotesId={deepLinkNotes}
             onDeepLinkConsumed={() => setDeepLinkNotes(null)}
           />
@@ -1572,8 +1729,9 @@ export default function App() {
                       const q = globalSearch.trim();
                       const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")})`, "gi");
                       const parts = text.split(re);
+                      // Odd-indexed parts are the captured matches from split(); even-indexed are non-matches.
                       return parts.map((p, i) =>
-                        re.test(p) ? <mark key={i} style={{ background:"rgba(241,196,15,0.3)", color:"#f1c40f", borderRadius:2, padding:"0 1px" }}>{p}</mark> : p
+                        i % 2 === 1 ? <mark key={i} style={{ background:"rgba(241,196,15,0.3)", color:"#f1c40f", borderRadius:2, padding:"0 1px" }}>{p}</mark> : p
                       );
                     };
                     return (
@@ -1724,12 +1882,48 @@ export default function App() {
       )}
 
       {/* ── SETTINGS ── */}
+      {/* ── REVISIT SHEET ── */}
+      {revisitLog && (
+        <div onClick={closeRevisit} style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.65)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", zIndex:500, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:theme.card, borderRadius:"20px 20px 0 0", width:"100%", maxWidth:"500px", padding:"20px 20px 40px", border:`1px solid ${theme.border2}` }}>
+            <div style={{ width:"36px", height:"4px", background:theme.border2, borderRadius:"2px", margin:"0 auto 20px" }}/>
+            <div style={{ fontSize:"10.5px", letterSpacing:"0.18em", textTransform:"uppercase", color:"#d4a843", fontWeight:"600", marginBottom:"6px" }}>Revisit</div>
+            <div style={{ fontSize:"19px", fontWeight:"700", letterSpacing:"-0.02em", color:theme.text, marginBottom:"4px" }}>{revisitLog.title}</div>
+            <div style={{ fontSize:"12.5px", color:theme.subtext, marginBottom:"18px" }}>
+              How do you feel about it now? Your earlier verdict stays in the timeline.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+              {["I loved it","I liked it","Meh","I didn't like it"].map(v => {
+                const vs = gvs(v);
+                const active = revisitVerdict === v;
+                return (
+                  <button key={v} onClick={() => setRevisitVerdict(v)}
+                    style={{ padding:"13px 8px", borderRadius:"12px", border:`1px solid ${active ? vs.border : theme.border}`, background:active ? vs.bg : "none", color:active ? vs.color : theme.subtext2, fontWeight:"600", fontSize:"12.5px", cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s" }}>
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea value={revisitThoughts} onChange={e => setRevisitThoughts(e.target.value)} placeholder="New thoughts… (optional)"
+              style={{ width:"100%", minHeight:"84px", marginTop:"12px", padding:"12px 14px", borderRadius:"12px", border:`1px solid ${theme.border}`, background:theme.input, color:theme.text, fontSize:"13px", lineHeight:"1.5", fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
+            <div style={{ display:"flex", gap:"10px", marginTop:"14px" }}>
+              <button onClick={closeRevisit} style={{ flex:1, padding:"14px 0", borderRadius:"100px", border:`1px solid ${theme.border2}`, background:"none", color:theme.subtext2, fontWeight:"600", fontSize:"13.5px", cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
+              <button onClick={saveRevisit} disabled={!revisitVerdict}
+                style={{ flex:1, padding:"14px 0", borderRadius:"100px", border:"none", background:revisitVerdict ? (darkMode ? "#f5f5f3" : "#141414") : theme.border, color:revisitVerdict ? (darkMode ? "#0a0a0a" : "#f5f5f3") : theme.subtext, fontWeight:"600", fontSize:"13.5px", cursor:revisitVerdict ? "pointer" : "default", fontFamily:"inherit" }}>
+                Save revisit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSettings && (
         <div onClick={() => setShowSettings(false)} style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.6)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()} style={{ background:theme.card, borderRadius:"20px 20px 0 0", width:"100%", maxWidth:"500px", padding:"20px 20px 40px", border:`1px solid ${theme.border2}` }}>
             <div style={{ width:"36px", height:"4px", background:theme.border2, borderRadius:"2px", margin:"0 auto 20px" }}/>
             <div style={{ fontSize:"16px", fontWeight:"700", marginBottom:"20px", color:theme.text }}>Settings</div>
             {[
+              { label:"Your name", sub:"Used in your home page insights", right:<input value={customName} onChange={e => setCustomName(e.target.value)} onBlur={saveName} placeholder="Add name" style={{ width:"130px", padding:"7px 12px", borderRadius:"20px", border:`1px solid ${theme.border2}`, background:"none", color:theme.text, fontSize:"12px", outline:"none", textAlign:"right", flexShrink:0, fontFamily:"inherit" }}/> },
               { label:"Appearance", sub: darkMode?"Dark mode":"Light mode", right:<button onClick={() => setDarkMode(v=>!v)} style={{ background:darkMode?"#3498db":"rgba(0,0,0,0.1)", border:"none", borderRadius:"20px", width:"48px", height:"26px", cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}><div style={{ position:"absolute", top:"3px", left:darkMode?"24px":"3px", width:"20px", height:"20px", borderRadius:"50%", background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}/></button> },
               { label: user ? "Account" : "Sync your data", sub: user ? `Logged in as ${user.email}` : "Log in to sync across devices", right: user ? <button onClick={() => { supabase.auth.signOut(); setShowSettings(false); }} style={{ padding:"7px 14px", borderRadius:"20px", border:`1px solid ${theme.border2}`, background:"none", color:theme.text, fontSize:"12px", fontWeight:"600", cursor:"pointer", flexShrink:0 }}>Logout</button> : <button onClick={() => { setShowSettings(false); setShowAuthModal(true); setAuthMsg(""); }} style={{ padding:"7px 14px", borderRadius:"20px", border:"1px solid #3498db", background:"none", color:"#3498db", fontSize:"12px", fontWeight:"600", cursor:"pointer", flexShrink:0 }}>Login ☁️</button> },
               { label:"Export data", sub:"Download all logs as CSV", right:<button onClick={() => { exportCSV(logs, collections); setShowSettings(false); }} style={{ padding:"7px 14px", borderRadius:"20px", border:`1px solid ${theme.border2}`, background:"none", color:"#27ae60", fontSize:"12px", fontWeight:"600", cursor:"pointer", flexShrink:0 }}>Export 📥</button> },
@@ -1771,9 +1965,11 @@ export default function App() {
           onClose={() => { setShowQuickLog(false); setLastQuickLogEntry(null); }}
           onExpandFull={() => {
             setShowQuickLog(false);
-            // Pre-fill the full log form with the quick-logged entry's data
-            const latest = logs[0];
-            if (latest) startEdit(latest);
+            const savedId = lastQuickLogEntry?.id;
+            const target = (savedId && savedId !== "latest")
+              ? logs.find(l => l.id === savedId)
+              : logs[0];
+            if (target) startEdit(target);
             else setActiveTab("log");
             setLastQuickLogEntry(null);
           }}

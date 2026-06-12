@@ -158,7 +158,7 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
                 : <span style={{
                     color: "rgba(255,255,255,0.2)", fontFamily: "'Unbounded',sans-serif",
                     fontSize: "8px", letterSpacing: "0.12em",
-                  }}>NO NOTES YET — TAP EDIT TO ADD</span>
+                  }}>NO NOTES YET: TAP EDIT TO ADD</span>
               }
             </div>
           </div>
@@ -190,8 +190,10 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
 };
 
 // ─── EXPAND PANEL (bottom sheet) ──────────────────────────────────────────────
-const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, openNotesImmediately }) => {
+const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, onRevisit, openNotesImmediately }) => {
   const vp = VERDICT_PILL_STYLE(log.verdict);
+  const isFinished = ["I loved it","I liked it","Meh","I didn't like it"].includes(log.verdict);
+  const hasTimeline = Array.isArray(log.revisits) && log.revisits.length > 1;
   const ss = getSubtypeStyle(log.media_type);
   const { color1, color2 } = generateCoverGradient(log.title || "");
   const [imgErr, setImgErr] = useState(false);
@@ -375,6 +377,50 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
           </button>
         </div>
 
+        {/* ── Verdict timeline — only after a revisit ── */}
+        {hasTimeline && (
+          <div style={{ padding:"14px 18px 4px", borderBottom:"1px solid rgba(255,255,255,0.06)",
+            flexShrink:0, maxHeight:180, overflowY:"auto" }}>
+            <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7, letterSpacing:"0.15em",
+              color:"rgba(255,255,255,0.45)", textTransform:"uppercase", marginBottom:12 }}>
+              ↻ Verdict over time
+            </div>
+            {log.revisits.map((r, i) => {
+              const rvp = VERDICT_PILL_STYLE(r.verdict);
+              const dateStr = r.date
+                ? new Date(r.date).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })
+                : "";
+              const isLast = i === log.revisits.length - 1;
+              return (
+                <div key={i} style={{ display:"flex", gap:11, marginBottom:isLast ? 10 : 0 }}>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", paddingTop:3 }}>
+                    <span style={{ width:7, height:7, borderRadius:"50%", background:rvp.color,
+                      flexShrink:0, boxShadow:isLast ? `0 0 8px ${rvp.color}88` : "none" }}/>
+                    {!isLast && <span style={{ width:1, flex:1, background:"rgba(255,255,255,0.12)", margin:"4px 0" }}/>}
+                  </div>
+                  <div style={{ flex:1, minWidth:0, paddingBottom:isLast ? 0 : 12 }}>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
+                      <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:8, fontWeight:700,
+                        letterSpacing:"0.08em", color:rvp.color }}>{rvp.label}</span>
+                      <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7,
+                        color:"rgba(255,255,255,0.4)", letterSpacing:"0.08em" }}>
+                        {dateStr}{i === 0 ? " · FIRST IMPRESSION" : isLast ? " · NOW" : ""}
+                      </span>
+                    </div>
+                    {r.thoughts && (
+                      <div style={{ fontFamily:"'DM Serif Display',serif", fontStyle:"italic",
+                        fontSize:12.5, color:"rgba(255,255,255,0.75)", lineHeight:1.6, marginTop:4,
+                        whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                        {r.thoughts}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ── Notes preview — tap to slide open the side panel ── */}
         <div
           onClick={() => setNotesState("side")}
@@ -408,6 +454,15 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
         {/* ── Footer ── */}
         <div style={{ padding:"10px 18px 24px", borderTop:"1px solid rgba(255,255,255,0.06)",
           display:"flex", gap:8, flexShrink:0 }}>
+          {onRevisit && isFinished && (
+            <button onClick={() => onRevisit(log)}
+              style={{ flex:1, padding:"10px", borderRadius:8,
+                border:"1px solid rgba(212,168,67,0.25)", background:"none",
+                color:"rgba(212,168,67,0.7)", fontFamily:"'Unbounded',sans-serif",
+                fontSize:8, letterSpacing:"0.1em", cursor:"pointer" }}>
+              ↻ REVISIT
+            </button>
+          )}
           <button onClick={() => setNotesState("side")}
             style={{ flex:1, padding:"10px", borderRadius:8,
               border:"1px solid rgba(255,255,255,0.07)", background:"none",
@@ -429,14 +484,15 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
 };
 
 // ─── GRID FEED ────────────────────────────────────────────────────────────────
-export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, searchTerm = "", deepLinkNotesId, onDeepLinkConsumed, deepLinkOpenId, onDeepLinkOpenConsumed }) => {
+export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, onRevisit, searchTerm = "", deepLinkNotesId, onDeepLinkConsumed, deepLinkOpenId, onDeepLinkOpenConsumed }) => {
   const [selected, setSelected] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null); // src string when showing fullscreen
   const pressTimer = React.useRef(null);
   const didLongPress = React.useRef(false);
   const GAP = 2;
 
-  if (!logs.length) return null;
+  // Clear any pending long-press timer on unmount
+  useEffect(() => () => clearTimeout(pressTimer.current), []);
 
   // Keep selected in sync when logs update (e.g. after saving a note)
   useEffect(() => {
@@ -498,6 +554,10 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
       }
     }
   }, [deepLinkOpenId]);
+
+  // Early return AFTER all hooks: returning above them crashes React when
+  // logs transitions to empty while the component is mounted.
+  if (!logs.length) return null;
 
   // True masonry: assign each card to whichever column is shorter.
   // Heights are estimated from aspect ratio so we don't need to measure DOM.
@@ -673,6 +733,7 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, sear
           onEdit={onEdit}
           onDelete={(id) => { onDelete(id); setSelected(null); }}
           onNotesUpdate={onNotesUpdate}
+          onRevisit={onRevisit}
           openNotesImmediately={!!selected._openNotes}
         />
       )}

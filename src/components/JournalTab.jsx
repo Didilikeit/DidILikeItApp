@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { getSubtypeStyle, generateCoverGradient } from "../utils/helpers.js";
 
 if (!document.getElementById("journal-fonts")) {
@@ -152,6 +152,9 @@ const CalendarView = ({ logs, darkMode, theme, onLogTap }) => {
   const [lightboxImg, setLightboxImg] = useState(null);
   const pressTimer   = React.useRef(null);
   const didLongPress = React.useRef(false);
+
+  // Clear any pending long-press timer on unmount
+  useEffect(() => () => clearTimeout(pressTimer.current), []);
 
   // Build date → logs map
   const logsByDate = useMemo(() => {

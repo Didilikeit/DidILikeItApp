@@ -169,14 +169,20 @@ const NotesPanel = ({ log, darkMode, onClose, onNotesUpdate, searchTerm }) => {
 };
 
 // ─── DOTS MENU ────────────────────────────────────────────────────────────────
-const DotsMenu = ({ log, theme, darkMode, onEdit, onDelete, onClose }) => (
+const DotsMenu = ({ log, theme, darkMode, onEdit, onDelete, onRevisit, onClose }) => {
+  const canRevisit = onRevisit && ["I loved it","I liked it","Meh","I didn't like it"].includes(log.verdict);
+  return (
   <div onClick={e => e.stopPropagation()} style={{ position:"absolute", top:"36px", right:"12px", zIndex:30, background:darkMode?"#1a1a1a":"#fff", border:"1px solid rgba(255,255,255,0.12)", borderRadius:"10px", overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,0.6)", minWidth:"140px", animation:"fadeInDown 0.15s ease" }}>
     <style>{`@keyframes fadeInDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
     <button onClick={() => { onEdit(); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.8)", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>✏️ Edit entry</button>
+    {canRevisit && (
+      <button onClick={() => { onRevisit(log); onClose(); }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid rgba(255,255,255,0.07)", color:"#d4a843", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>↻ Log a revisit</button>
+    )}
     <button onClick={() => { if(window.confirm(`Delete "${log.title}"?`)){onDelete();onClose();} }} style={{ width:"100%", padding:"12px 14px", background:"none", border:"none", color:"#e74c3c", fontSize:"12px", fontWeight:"600", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>🗑 Delete</button>
     <button onClick={onClose} style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderTop:"1px solid rgba(255,255,255,0.05)", color:"#444", fontSize:"11px", cursor:"pointer", textAlign:"left" }}>Cancel</button>
   </div>
-);
+  );
+};
 
 // ─── MINIMISE BUTTON ──────────────────────────────────────────────────────────
 const MinimiseBtn = ({ onMinimise }) => (
@@ -207,7 +213,7 @@ const MinimiseBtn = ({ onMinimise }) => (
 // notesState: null | "inline" | "panel"
 const Card = ({
   log, size, isExpanded, notesState, onCardTap, onNotesInline, onNotesClose, onOpenPanel, onMinimise, onNotesUpdate,
-  theme, darkMode, onEdit, onDelete, searchTerm, onMapClick, pageNum,
+  theme, darkMode, onEdit, onDelete, onRevisit, searchTerm, onMapClick, pageNum,
 }) => {
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [imgError,  setImgError]  = useState(false);
@@ -253,7 +259,7 @@ const Card = ({
         <button
           onClick={e => { e.stopPropagation(); setMenuOpen(v=>!v); }}
           style={{ position:"absolute", top:"12px", right:"12px", zIndex:10, width:"28px", height:"28px", borderRadius:"50%", border:"1px solid rgba(255,255,255,0.12)", background:"rgba(0,0,0,0.4)", backdropFilter:"blur(8px)", color:"rgba(255,255,255,0.6)", fontSize:"14px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", letterSpacing:"1px" }}>···</button>
-        {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onClose={() => setMenuOpen(false)}/>}
+        {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onRevisit={onRevisit} onClose={() => setMenuOpen(false)}/>}
 
         {/* Main content */}
         <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"28px 20px 24px", zIndex:3 }}>
@@ -309,7 +315,7 @@ const Card = ({
       <div style={{ flex:1, padding:"14px 16px 12px 10px", display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:0, position:"relative" }}>
         <div style={{ position:"absolute", top:"12px", right:"36px", fontFamily:"'DM Serif Display',serif", fontStyle:"italic", fontSize:"10px", color:"rgba(255,255,255,0.1)", zIndex:6 }}>{pageNum}</div>
         <button onClick={e => { e.stopPropagation(); setMenuOpen(v=>!v); }} style={{ position:"absolute", top:"8px", right:"10px", zIndex:10, width:"24px", height:"24px", borderRadius:"50%", border:"1px solid rgba(255,255,255,0.1)", background:"rgba(0,0,0,0.5)", color:"rgba(255,255,255,0.4)", fontSize:"12px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", letterSpacing:"1px" }}>···</button>
-        {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onClose={() => setMenuOpen(false)}/>}
+        {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onRevisit={onRevisit} onClose={() => setMenuOpen(false)}/>}
         <div>
           <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:"7px", fontWeight:"400", letterSpacing:"0.18em", textTransform:"uppercase", color:"#2a2a2a", marginBottom:"6px" }}>{ss.icon} {log.media_type}</div>
           <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:"20px", lineHeight:"1.1", color:"#fff", letterSpacing:"-0.3px", marginBottom:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{log.title}</div>
@@ -338,7 +344,7 @@ const Card = ({
       <div style={{ position:"absolute", top:0, left:0, bottom:0, width:"3px", background:VERDICT_BAND(log.verdict), zIndex:5 }}/>
       <div style={{ position:"absolute", top:"10px", right:"10px", fontFamily:"'DM Serif Display',serif", fontStyle:"italic", fontSize:"10px", color:"rgba(255,255,255,0.12)", zIndex:4 }}>{pageNum}</div>
       <button onClick={e => { e.stopPropagation(); setMenuOpen(v=>!v); }} style={{ position:"absolute", top:"6px", right:"6px", zIndex:10, width:"22px", height:"22px", borderRadius:"50%", border:"1px solid rgba(255,255,255,0.1)", background:"rgba(0,0,0,0.5)", color:"rgba(255,255,255,0.4)", fontSize:"11px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", letterSpacing:"1px" }}>···</button>
-      {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onClose={() => setMenuOpen(false)}/>}
+      {menuOpen && <DotsMenu log={log} theme={theme} darkMode={darkMode} onEdit={onEdit} onDelete={onDelete} onRevisit={onRevisit} onClose={() => setMenuOpen(false)}/>}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"10px 12px 14px", zIndex:2 }}>
         <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:"6px", fontWeight:"700", letterSpacing:"0.18em", textTransform:"uppercase", color:"rgba(255,255,255,0.25)", marginBottom:"4px" }}>{ss.icon} {log.media_type}</div>
         <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:"16px", lineHeight:"1.1", color:"#fff", marginBottom:"7px", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{log.title}</div>
@@ -358,7 +364,7 @@ const Card = ({
 //   → tap 22% strip (inline or panel) → expandedId = null, notesState = null  (fully collapsed)
 //   → tap minimise (↓) on hero → expandedId = null       (fully collapsed)
 //
-export const EditorialFeed = ({ logs, theme, darkMode, getVerdictStyle, onEdit, onDelete, searchTerm, collections, onMapClick, onNotesUpdate }) => {
+export const EditorialFeed = ({ logs, theme, darkMode, getVerdictStyle, onEdit, onDelete, onRevisit, searchTerm, collections, onMapClick, onNotesUpdate }) => {
   const [expandedId, setExpandedId] = useState(null);
   const [notesState, setNotesState] = useState(null); // null | "inline" | "panel"
 
@@ -420,6 +426,7 @@ export const EditorialFeed = ({ logs, theme, darkMode, getVerdictStyle, onEdit, 
     searchTerm,
     onEdit:   () => onEdit(log),
     onDelete: () => onDelete(log.id),
+    onRevisit,
     onMapClick,
     onNotesUpdate,
   });

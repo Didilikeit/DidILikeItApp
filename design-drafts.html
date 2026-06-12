@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Did I Like It? — Home page design drafts</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1c1c1e; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; padding:40px 24px; color:#fff; }
+  h1 { font-size:18px; font-weight:600; margin-bottom:6px; }
+  .sub { color:#888; font-size:13px; margin-bottom:32px; }
+  .row { display:flex; gap:32px; justify-content:center; flex-wrap:wrap; align-items:flex-start; }
+  .frame-wrap { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .frame-label { font-size:13px; font-weight:600; color:#bbb; letter-spacing:0.04em; }
+  .frame-label b { color:#fff; }
+  .phone {
+    width:390px; height:760px; border-radius:38px; overflow:hidden;
+    border:1px solid #3a3a3c; box-shadow:0 30px 80px rgba(0,0,0,0.5);
+    position:relative; flex-shrink:0;
+  }
+  .screen { width:100%; height:100%; overflow-y:auto; scrollbar-width:none; }
+  .screen::-webkit-scrollbar { display:none; }
+
+  /* ════════════════ DRAFT A — THE SHELF (cinematic, artwork-led) ════════════════ */
+  .a { background:#0d0d0f; color:#f5f5f4; }
+  .a .hero { position:relative; padding:64px 24px 28px; overflow:hidden; }
+  .a .hero-bg {
+    position:absolute; inset:-40px;
+    background:
+      radial-gradient(ellipse 80% 60% at 70% 10%, rgba(120,90,60,0.35), transparent 65%),
+      radial-gradient(ellipse 70% 50% at 20% 30%, rgba(40,50,80,0.4), transparent 70%);
+    filter:blur(10px);
+  }
+  .a .hero-content { position:relative; }
+  .a .kicker { font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:rgba(245,245,244,0.45); font-weight:500; margin-bottom:10px; }
+  .a .title { font-size:34px; font-weight:700; letter-spacing:-0.03em; line-height:1.05; margin-bottom:26px; }
+  .a .pills { display:flex; gap:10px; }
+  .a .pill {
+    flex:1; padding:15px 0; border-radius:100px; text-align:center;
+    font-size:14px; font-weight:600; letter-spacing:-0.01em; cursor:pointer;
+  }
+  .a .pill.primary { background:#f5f5f4; color:#0d0d0f; }
+  .a .pill.ghost { background:rgba(255,255,255,0.07); color:#f5f5f4; border:1px solid rgba(255,255,255,0.14); backdrop-filter:blur(6px); }
+  .a .section { padding:30px 24px 0; }
+  .a .section-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+  .a .section-title { font-size:15px; font-weight:600; letter-spacing:-0.01em; }
+  .a .see-all { font-size:12px; color:rgba(245,245,244,0.4); text-decoration:none; }
+  .a .shelf { display:flex; gap:12px; overflow-x:auto; padding:0 24px 8px; scrollbar-width:none; }
+  .a .shelf::-webkit-scrollbar { display:none; }
+  .a .poster { flex-shrink:0; width:118px; }
+  .a .poster-art {
+    width:118px; height:172px; border-radius:10px; margin-bottom:9px;
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  .a .poster-title { font-size:12.5px; font-weight:600; line-height:1.3; margin-bottom:3px; }
+  .a .poster-meta { font-size:11px; color:rgba(245,245,244,0.4); }
+  .a .verdict-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; vertical-align:1px; }
+  .a .quietline {
+    margin:34px 24px 0; padding:18px 0 60px; border-top:1px solid rgba(255,255,255,0.08);
+    font-size:12.5px; color:rgba(245,245,244,0.4); line-height:1.7;
+  }
+  .a .quietline b { color:rgba(245,245,244,0.85); font-weight:600; }
+
+  /* ════════════════ DRAFT B — THE JOURNAL (editorial, typographic) ════════════════ */
+  .b { background:#faf8f4; color:#1a1814; }
+  .b .masthead { padding:60px 26px 0; }
+  .b .date { font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#9b958a; font-weight:500; margin-bottom:14px; }
+  .b .title { font-family:Georgia,"Times New Roman",serif; font-size:40px; font-weight:500; letter-spacing:-0.02em; line-height:1.02; }
+  .b .title em { font-style:italic; }
+  .b .rule { height:1px; background:#1a1814; margin:24px 26px 0; }
+  .b .rule.thin { background:#e2ddd2; }
+  .b .pills { display:flex; gap:10px; padding:22px 26px 0; }
+  .b .pill {
+    flex:1; padding:15px 0; border-radius:100px; text-align:center;
+    font-size:14px; font-weight:600; cursor:pointer;
+  }
+  .b .pill.primary { background:#1a1814; color:#faf8f4; }
+  .b .pill.ghost { background:none; color:#1a1814; border:1px solid #1a1814; }
+  .b .section-label { padding:34px 26px 14px; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#9b958a; font-weight:600; }
+  .b .entry { display:flex; gap:16px; padding:16px 26px; align-items:center; }
+  .b .entry + .entry { border-top:1px solid #ece8df; }
+  .b .entry-art { width:52px; height:74px; border-radius:4px; flex-shrink:0; }
+  .b .entry-body { flex:1; min-width:0; }
+  .b .entry-title { font-family:Georgia,serif; font-size:17px; font-weight:500; letter-spacing:-0.01em; margin-bottom:4px; }
+  .b .entry-meta { font-size:12px; color:#9b958a; }
+  .b .entry-verdict { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; font-weight:600; flex-shrink:0; }
+  .b .v-loved { color:#a07c2c; } .b .v-liked { color:#5a7a52; } .b .v-meh { color:#9b958a; }
+  .b .footline { padding:26px; padding-bottom:70px; font-family:Georgia,serif; font-style:italic; font-size:14px; color:#9b958a; line-height:1.6; }
+
+  /* ════════════════ DRAFT C — THE LEDGER (precision, monochrome + one accent) ════════════════ */
+  .c { background:#101012; color:#ededef; }
+  .c .top { padding:62px 24px 0; }
+  .c .brand { display:flex; align-items:center; gap:8px; margin-bottom:42px; }
+  .c .brand-mark { width:8px; height:8px; border-radius:2px; background:#e8b13c; }
+  .c .brand-name { font-size:13px; font-weight:600; letter-spacing:0.01em; color:#a8a8ad; }
+  .c .big-stat { font-size:60px; font-weight:600; letter-spacing:-0.045em; line-height:1; font-variant-numeric:tabular-nums; }
+  .c .big-stat-label { font-size:13px; color:#6e6e76; margin-top:8px; letter-spacing:0; }
+  .c .big-stat-label b { color:#e8b13c; font-weight:500; }
+  .c .pills { display:flex; gap:10px; padding:34px 24px 0; }
+  .c .pill {
+    flex:1; padding:14px 0; border-radius:10px; text-align:center;
+    font-size:13.5px; font-weight:600; cursor:pointer;
+  }
+  .c .pill.primary { background:#e8b13c; color:#101012; }
+  .c .pill.ghost { background:#1b1b1f; color:#ededef; border:1px solid #2a2a30; }
+  .c .list-head { display:flex; justify-content:space-between; align-items:baseline; padding:40px 24px 6px; }
+  .c .list-title { font-size:13px; font-weight:600; color:#a8a8ad; }
+  .c .see-all { font-size:12px; color:#56565e; }
+  .c .lrow { display:flex; align-items:center; gap:14px; padding:14px 24px; }
+  .c .lrow + .lrow { border-top:1px solid #1d1d21; }
+  .c .lrow-idx { font-size:11px; color:#46464e; width:18px; font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .c .lrow-body { flex:1; min-width:0; }
+  .c .lrow-title { font-size:14px; font-weight:550; margin-bottom:2px; }
+  .c .lrow-meta { font-size:11.5px; color:#6e6e76; }
+  .c .lrow-tick { flex-shrink:0; display:flex; gap:3px; }
+  .c .tick { width:4px; border-radius:2px; background:#2a2a30; height:16px; }
+  .c .tick.on { background:#e8b13c; }
+  .c .foot { padding:30px 24px 70px; font-size:12px; color:#46464e; line-height:1.7; }
+
+  /* fake artwork tones (placeholder for real cover art) */
+  .art1 { background:linear-gradient(160deg,#4a3728,#1f1815); }
+  .art2 { background:linear-gradient(160deg,#22324a,#10151f); }
+  .art3 { background:linear-gradient(160deg,#3a4a35,#161c14); }
+  .art4 { background:linear-gradient(160deg,#4a2235,#1d0f16); }
+  .art1l { background:linear-gradient(160deg,#d9c6ae,#b09a7c); }
+  .art2l { background:linear-gradient(160deg,#aebed9,#7c8fb0); }
+  .art3l { background:linear-gradient(160deg,#b5c9ad,#8aa07e); }
+</style>
+</head>
+<body>
+
+<h1>Did I Like It? — three home page drafts</h1>
+<div class="sub">Fake data, real proportions. Scroll inside each phone. Artwork blocks are placeholders for real cover art.</div>
+
+<div class="row">
+
+  <!-- ══════════ DRAFT A ══════════ -->
+  <div class="frame-wrap">
+    <div class="frame-label"><b>A — The Shelf</b> · cinematic, artwork does the talking</div>
+    <div class="phone"><div class="screen a">
+
+      <div class="hero">
+        <div class="hero-bg"></div>
+        <div class="hero-content">
+          <div class="kicker">Thursday 12 June</div>
+          <div class="title">Good evening,<br>Amari.</div>
+          <div class="pills">
+            <div class="pill primary">Quick log</div>
+            <div class="pill ghost">Full log</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Recently logged</div>
+          <a class="see-all" href="#">All →</a>
+        </div>
+      </div>
+      <div class="shelf">
+        <div class="poster">
+          <div class="poster-art art1"></div>
+          <div class="poster-title">Conclave</div>
+          <div class="poster-meta"><span class="verdict-dot" style="background:#d4a843"></span>Loved · Film</div>
+        </div>
+        <div class="poster">
+          <div class="poster-art art2"></div>
+          <div class="poster-title">Wolf Hall</div>
+          <div class="poster-meta"><span class="verdict-dot" style="background:#7da06b"></span>Liked · Book</div>
+        </div>
+        <div class="poster">
+          <div class="poster-art art3"></div>
+          <div class="poster-title">Brat</div>
+          <div class="poster-meta"><span class="verdict-dot" style="background:#8b8b8b"></span>Meh · Album</div>
+        </div>
+        <div class="poster">
+          <div class="poster-art art4"></div>
+          <div class="poster-title">The Bear S3</div>
+          <div class="poster-meta"><span class="verdict-dot" style="background:#d4a843"></span>Loved · TV</div>
+        </div>
+      </div>
+
+      <div class="quietline">
+        <b>47 things</b> logged this year · <b>83%</b> hit rate · most logged: <b>Christopher Nolan</b><br>
+        Full stats live in their own tab — the home page stays calm.
+      </div>
+
+    </div></div>
+  </div>
+
+  <!-- ══════════ DRAFT B ══════════ -->
+  <div class="frame-wrap">
+    <div class="frame-label"><b>B — The Journal</b> · editorial, warm paper, serif type</div>
+    <div class="phone"><div class="screen b">
+
+      <div class="masthead">
+        <div class="date">Thursday · 12 June 2026</div>
+        <div class="title">Did I<br>Like It<em>?</em></div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="pills">
+        <div class="pill primary">Quick log</div>
+        <div class="pill ghost">Full log</div>
+      </div>
+
+      <div class="section-label">Recently logged</div>
+      <div class="entry">
+        <div class="entry-art art1l"></div>
+        <div class="entry-body">
+          <div class="entry-title">Conclave</div>
+          <div class="entry-meta">Film · Edward Berger · 10 June</div>
+        </div>
+        <div class="entry-verdict v-loved">Loved</div>
+      </div>
+      <div class="entry">
+        <div class="entry-art art2l"></div>
+        <div class="entry-body">
+          <div class="entry-title">Wolf Hall</div>
+          <div class="entry-meta">Book · Hilary Mantel · 8 June</div>
+        </div>
+        <div class="entry-verdict v-liked">Liked</div>
+      </div>
+      <div class="entry">
+        <div class="entry-art art3l"></div>
+        <div class="entry-body">
+          <div class="entry-title">Brat</div>
+          <div class="entry-meta">Album · Charli XCX · 5 June</div>
+        </div>
+        <div class="entry-verdict v-meh">Meh</div>
+      </div>
+      <div class="rule thin" style="margin-top:8px"></div>
+
+      <div class="footline">
+        Forty-seven things logged this year — you loved most of what you watched in spring.
+      </div>
+
+    </div></div>
+  </div>
+
+  <!-- ══════════ DRAFT C ══════════ -->
+  <div class="frame-wrap">
+    <div class="frame-label"><b>C — The Ledger</b> · precise, monochrome, one gold accent</div>
+    <div class="phone"><div class="screen c">
+
+      <div class="top">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div class="brand-name">Did I Like It?</div>
+        </div>
+        <div class="big-stat">47</div>
+        <div class="big-stat-label">things logged in 2026 · <b>83% hit rate</b></div>
+      </div>
+
+      <div class="pills">
+        <div class="pill primary">Quick log</div>
+        <div class="pill ghost">Full log</div>
+      </div>
+
+      <div class="list-head">
+        <div class="list-title">Recent</div>
+        <div class="see-all">View all</div>
+      </div>
+      <div class="lrow">
+        <div class="lrow-idx">01</div>
+        <div class="lrow-body">
+          <div class="lrow-title">Conclave</div>
+          <div class="lrow-meta">Film · Loved it · Jun 10</div>
+        </div>
+        <div class="lrow-tick"><div class="tick on"></div><div class="tick on"></div><div class="tick on"></div><div class="tick on"></div></div>
+      </div>
+      <div class="lrow">
+        <div class="lrow-idx">02</div>
+        <div class="lrow-body">
+          <div class="lrow-title">Wolf Hall</div>
+          <div class="lrow-meta">Book · Liked it · Jun 8</div>
+        </div>
+        <div class="lrow-tick"><div class="tick on"></div><div class="tick on"></div><div class="tick on"></div><div class="tick"></div></div>
+      </div>
+      <div class="lrow">
+        <div class="lrow-idx">03</div>
+        <div class="lrow-body">
+          <div class="lrow-title">Brat</div>
+          <div class="lrow-meta">Album · Meh · Jun 5</div>
+        </div>
+        <div class="lrow-tick"><div class="tick on"></div><div class="tick on"></div><div class="tick"></div><div class="tick"></div></div>
+      </div>
+      <div class="lrow">
+        <div class="lrow-idx">04</div>
+        <div class="lrow-body">
+          <div class="lrow-title">The Bear — Season 3</div>
+          <div class="lrow-meta">TV · Loved it · Jun 2</div>
+        </div>
+        <div class="lrow-tick"><div class="tick on"></div><div class="tick on"></div><div class="tick on"></div><div class="tick on"></div></div>
+      </div>
+
+      <div class="foot">
+        Verdict shown as a four-bar scale. Deep stats move to a dedicated tab.
+      </div>
+
+    </div></div>
+  </div>
+
+</div>
+</body>
+</html>
