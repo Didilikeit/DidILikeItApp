@@ -785,6 +785,21 @@ export default function App() {
     // ── Shelf design tokens ──
     const currentLogs = logs.filter(l => l.verdict?.startsWith("Currently")).slice(0, 10);
     const queueLogs = logs.filter(l => l.verdict?.startsWith("Want to") || l.verdict === "Want to go").slice(0, 10);
+    // Entries you've revisited (snapshot[0] + at least one real revisit), newest revisit first.
+    // The entry stays on its original date in History; this just surfaces the revisit activity.
+    const revisitedShelf = logs
+      .filter(l => Array.isArray(l.revisits) && l.revisits.length > 1 && l.revisits[l.revisits.length - 1]?.date)
+      .map(l => ({ ...l, _revisitedAt: l.revisits[l.revisits.length - 1].date }))
+      .sort((a, b) => new Date(b._revisitedAt) - new Date(a._revisitedAt))
+      .slice(0, 10);
+    const revisitedAgo = d => {
+      const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+      if (days <= 0) return "Revisited today";
+      if (days === 1) return "Revisited yesterday";
+      if (days < 30) return `Revisited ${days}d ago`;
+      if (days < 365) return `Revisited ${Math.floor(days / 30)}mo ago`;
+      return `Revisited ${Math.floor(days / 365)}y ago`;
+    };
     const progressInfo = l => {
       const cp = Number(l.current_page), tp = Number(l.total_pages);
       const ce = Number(l.current_episode), te = Number(l.total_episodes);
@@ -919,6 +934,39 @@ export default function App() {
                     <div style={{ fontSize:"10px", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:"600", color:sv.gold ? "#d4a843" : theme.subtext, display:"flex", alignItems:"center", gap:"6px" }}>
                       <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:sv.dot, flexShrink:0, boxShadow:sv.gold ? "0 0 8px rgba(212,168,67,0.55)" : "none" }}/>
                       <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sv.label} · {log.media_type}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── RECENTLY REVISITED (shelf) ── */}
+        {revisitedShelf.length > 0 && (
+          <div style={{ marginBottom:"6px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", padding:"8px 22px 14px" }}>
+              <div style={{ fontSize:"11px", fontWeight:"600", color:theme.subtext, letterSpacing:"0.18em", textTransform:"uppercase" }}>↻ Recently revisited</div>
+            </div>
+            <div style={{ display:"flex", gap:"12px", overflowX:"auto", padding:"4px 22px 24px", scrollbarWidth:"none", WebkitOverflowScrolling:"touch", scrollSnapType:"x proximity" }}>
+              {revisitedShelf.map(log => {
+                const sv = SHELF_VERDICTS[log.verdict] || { label:"", dot:"#777" };
+                const catColor = CATEGORIES[getCat(log.media_type)]?.color || "#888";
+                return (
+                  <div key={log.id} onClick={() => { setHistoryDisplay("compact"); setActiveTab("history"); setDeepLinkOpenId(log.id); }}
+                    style={{ flexShrink:0, width:"104px", cursor:"pointer", scrollSnapAlign:"start" }}>
+                    <div style={{ position:"relative", width:"100%", aspectRatio:"2/3", borderRadius:"11px", overflow:"hidden", marginBottom:"9px", border:`1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`, boxShadow:darkMode ? "0 12px 26px rgba(0,0,0,0.5)" : "0 10px 22px rgba(0,0,0,0.14)", background:darkMode ? "#141414" : "#e8e8e8" }}>
+                      <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:`linear-gradient(160deg, ${catColor}38, ${catColor}0d)` }}>
+                        <span style={{ fontFamily:"Georgia, 'Times New Roman', serif", fontSize:"30px", color:`${catColor}cc`, lineHeight:1 }}>{(log.title || "?").charAt(0).toUpperCase()}</span>
+                      </div>
+                      {log.artwork && <img src={log.artwork} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }} onError={e => e.target.style.display="none"}/>}
+                      <div style={{ position:"absolute", inset:0, background:"linear-gradient(165deg, rgba(255,255,255,0.10) 0%, transparent 38%)", pointerEvents:"none" }}/>
+                      <div style={{ position:"absolute", top:"8px", right:"8px", fontSize:"10px", lineHeight:1, color:"rgba(245,245,243,0.92)", background:"rgba(8,8,8,0.55)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", padding:"4px 6px", borderRadius:"20px", border:"1px solid rgba(255,255,255,0.14)" }}>↻</div>
+                    </div>
+                    <div style={{ fontSize:"12px", fontWeight:"600", letterSpacing:"-0.01em", color:theme.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginBottom:"3px" }}>{log.title}</div>
+                    <div style={{ fontSize:"9.5px", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:"600", color:sv.gold ? "#d4a843" : theme.subtext, display:"flex", alignItems:"center", gap:"5px" }}>
+                      <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:sv.dot, flexShrink:0, boxShadow:sv.gold ? "0 0 8px rgba(212,168,67,0.55)" : "none" }}/>
+                      <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{revisitedAgo(log._revisitedAt)}</span>
                     </div>
                   </div>
                 );
