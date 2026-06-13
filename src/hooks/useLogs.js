@@ -125,6 +125,53 @@ export const useLogs = () => {
     }
   }, [fetchLogs]);
 
+  // Edit an existing revisit entry (verdict + thoughts) by index. The log's main
+  // verdict mirrors the latest entry, so editing the most recent one updates it too.
+  const editRevisit = useCallback(async (log, index, { verdict, thoughts }, user) => {
+    const arr = Array.isArray(log.revisits) ? [...log.revisits] : [];
+    if (index < 0 || index >= arr.length) return;
+    arr[index] = { ...arr[index], verdict, thoughts: thoughts?.trim() || "" };
+    const mainVerdict = arr[arr.length - 1].verdict;
+
+    // Optimistically update state
+    setLogs(prev => prev.map(l => l.id === log.id ? { ...l, verdict: mainVerdict, revisits: arr } : l));
+
+    if (user) {
+      const { error } = await supabase.from("logs").update({ verdict: mainVerdict, revisits: arr }).eq("id", log.id).eq("user_id", user.id);
+      if (error) {
+        console.error("Failed to edit revisit:", error);
+        await fetchLogs(user);
+        throw error;
+      }
+    } else {
+      writeGuestLogs(readGuestLogs().map(l => l.id === log.id ? { ...l, verdict: mainVerdict, revisits: arr } : l));
+    }
+  }, [fetchLogs]);
+
+  // Remove a revisit entry by index. If only the original impression would remain,
+  // collapse the timeline entirely (revisits: []) and restore that verdict.
+  const deleteRevisit = useCallback(async (log, index, user) => {
+    const arr = Array.isArray(log.revisits) ? [...log.revisits] : [];
+    if (index < 0 || index >= arr.length) return;
+    arr.splice(index, 1);
+    const nextRevisits = arr.length <= 1 ? [] : arr;
+    const mainVerdict = arr.length > 0 ? arr[arr.length - 1].verdict : log.verdict;
+
+    // Optimistically update state
+    setLogs(prev => prev.map(l => l.id === log.id ? { ...l, verdict: mainVerdict, revisits: nextRevisits } : l));
+
+    if (user) {
+      const { error } = await supabase.from("logs").update({ verdict: mainVerdict, revisits: nextRevisits }).eq("id", log.id).eq("user_id", user.id);
+      if (error) {
+        console.error("Failed to delete revisit:", error);
+        await fetchLogs(user);
+        throw error;
+      }
+    } else {
+      writeGuestLogs(readGuestLogs().map(l => l.id === log.id ? { ...l, verdict: mainVerdict, revisits: nextRevisits } : l));
+    }
+  }, [fetchLogs]);
+
   const updateNotes = useCallback(async (id, newNotes, user) => {
     // Optimistically update state
     setLogs(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));
@@ -161,5 +208,5 @@ export const useLogs = () => {
     });
   }, []);
 
-  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, links, addLink, removeLink };
+  return { logs, setLogs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, editRevisit, deleteRevisit, links, addLink, removeLink };
 };

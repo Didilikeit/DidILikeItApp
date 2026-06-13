@@ -30,7 +30,7 @@ export default function App() {
   const [appError, setAppError] = useState("");
 
   // ── Data ──
-  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, links, addLink, removeLink } = useLogs();
+  const { logs, fetchLogs, mergeGuestLogs, saveLog, deleteLog, updateNotes, addRevisit, editRevisit, deleteRevisit, links, addLink, removeLink } = useLogs();
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [lastQuickLogEntry, setLastQuickLogEntry] = useState(null);
   const [collections, setCollections] = useState([]);
@@ -693,6 +693,18 @@ export default function App() {
       setAppError("Could not save revisit: please try again.");
     });
     closeRevisit();
+  };
+  const handleEditRevisit = (log, index, payload) => {
+    editRevisit(log, index, payload, user).catch(err => {
+      console.error("Edit revisit failed:", err);
+      setAppError("Could not update revisit: please try again.");
+    });
+  };
+  const handleDeleteRevisit = (log, index) => {
+    deleteRevisit(log, index, user).catch(err => {
+      console.error("Delete revisit failed:", err);
+      setAppError("Could not delete revisit: please try again.");
+    });
   };
 
   // ── Styles ──
@@ -1521,6 +1533,8 @@ export default function App() {
                                     onDelete={id => handleDelete(id)}
                                     onNotesUpdate={handleUpdateNotes}
                                     onRevisit={openRevisit}
+                                    onEditRevisit={handleEditRevisit}
+                                    onDeleteRevisit={handleDeleteRevisit}
                                     searchTerm=""
                                   />
                                 : <div style={{ padding:"12px" }}>
@@ -1559,6 +1573,8 @@ export default function App() {
             onDelete={id => handleDelete(id)}
             onNotesUpdate={handleUpdateNotes}
             onRevisit={openRevisit}
+            onEditRevisit={handleEditRevisit}
+            onDeleteRevisit={handleDeleteRevisit}
             searchTerm={historySearch}
             deepLinkNotesId={deepLinkNotes}
             onDeepLinkConsumed={() => setDeepLinkNotes(null)}

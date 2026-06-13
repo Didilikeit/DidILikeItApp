@@ -189,16 +189,79 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
   );
 };
 
+// ─── REVISIT EDITOR (inline, within the verdict timeline) ─────────────────────
+const REVISIT_VERDICTS = ["I loved it","I liked it","Meh","I didn't like it"];
+
+const RevisitEditor = ({ initialVerdict, initialThoughts, onSave, onDelete, onCancel }) => {
+  const [verdict, setVerdict] = useState(initialVerdict || "");
+  const [thoughts, setThoughts] = useState(initialThoughts || "");
+
+  const ctrlBtn = {
+    flex: 1, padding: "9px 4px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+    background: "none", color: "rgba(255,255,255,0.5)", fontFamily: "'Unbounded',sans-serif",
+    fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer",
+  };
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:8 }}>
+        {REVISIT_VERDICTS.map(v => {
+          const vps = VERDICT_PILL_STYLE(v);
+          const active = verdict === v;
+          return (
+            <button key={v} onClick={() => setVerdict(v)}
+              style={{ padding:"9px 6px", borderRadius:8,
+                border:`1px solid ${active ? vps.border : "rgba(255,255,255,0.12)"}`,
+                background: active ? vps.bg : "none",
+                color: active ? vps.color : "rgba(255,255,255,0.5)",
+                fontFamily:"'Unbounded',sans-serif", fontSize:8, fontWeight:700,
+                letterSpacing:"0.06em", cursor:"pointer", transition:"all 0.15s" }}>
+              {v}
+            </button>
+          );
+        })}
+      </div>
+      <textarea value={thoughts} onChange={e => setThoughts(e.target.value)}
+        placeholder="Thoughts… (optional)" autoFocus
+        style={{ width:"100%", minHeight:80, padding:"11px 12px", borderRadius:8,
+          border:"1px solid rgba(255,255,255,0.12)", background:"rgba(255,255,255,0.04)",
+          color:"rgba(255,255,255,0.9)", fontFamily:"'DM Serif Display',serif", fontStyle:"italic",
+          fontSize:13.5, lineHeight:1.7, outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
+      <div style={{ display:"flex", gap:6, marginTop:8 }}>
+        <button onClick={() => verdict && onSave(verdict, thoughts)} disabled={!verdict}
+          style={{ ...ctrlBtn, flex:2, background: verdict ? "rgba(255,255,255,0.12)" : "none",
+            color: verdict ? "#fff" : "rgba(255,255,255,0.3)", border:"none",
+            cursor: verdict ? "pointer" : "default" }}>
+          SAVE
+        </button>
+        <button onClick={onCancel} style={ctrlBtn}>CANCEL</button>
+        {onDelete && (
+          <button onClick={() => { if (window.confirm("Delete this revisit?")) onDelete(); }}
+            style={{ ...ctrlBtn, flex:0, padding:"9px 12px", color:"rgba(231,76,60,0.7)",
+              border:"1px solid rgba(231,76,60,0.25)" }}>
+            🗑
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── EXPAND PANEL (bottom sheet) ──────────────────────────────────────────────
-const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, onRevisit, openNotesImmediately }) => {
+const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, onRevisit, onEditRevisit, onDeleteRevisit, openNotesImmediately }) => {
   const vp = VERDICT_PILL_STYLE(log.verdict);
   const isFinished = ["I loved it","I liked it","Meh","I didn't like it"].includes(log.verdict);
   const hasTimeline = Array.isArray(log.revisits) && log.revisits.length > 1;
+  const canEditTimeline = !!(onEditRevisit || onDeleteRevisit);
   const ss = getSubtypeStyle(log.media_type);
   const { color1, color2 } = generateCoverGradient(log.title || "");
   const [imgErr, setImgErr] = useState(false);
   // null = showing card sheet, "side" = notes panel slid over
   const [notesState, setNotesState] = useState(openNotesImmediately ? "side" : null);
+  // index of the revisit entry currently being edited inline, or null
+  const [editingRevisit, setEditingRevisit] = useState(null);
+  // Reset inline editing if the entry changes underneath us
+  useEffect(() => { setEditingRevisit(null); }, [log.id]);
 
   useEffect(() => {
     if (openNotesImmediately) setNotesState("side");
@@ -380,10 +443,10 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
         {/* ── Verdict timeline — only after a revisit ── */}
         {hasTimeline && (
           <div style={{ padding:"14px 18px 4px", borderBottom:"1px solid rgba(255,255,255,0.06)",
-            flexShrink:0, maxHeight:180, overflowY:"auto" }}>
+            flexShrink:0, maxHeight:editingRevisit != null ? 360 : 220, overflowY:"auto" }}>
             <div style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7, letterSpacing:"0.15em",
               color:"rgba(255,255,255,0.45)", textTransform:"uppercase", marginBottom:12 }}>
-              ↻ Verdict over time
+              ↻ Verdict over time{canEditTimeline ? " · tap ✎ to edit" : ""}
             </div>
             {log.revisits.map((r, i) => {
               const rvp = VERDICT_PILL_STYLE(r.verdict);
@@ -391,6 +454,7 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
                 ? new Date(r.date).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })
                 : "";
               const isLast = i === log.revisits.length - 1;
+              const isEditing = editingRevisit === i;
               return (
                 <div key={i} style={{ display:"flex", gap:11, marginBottom:isLast ? 10 : 0 }}>
                   <div style={{ display:"flex", flexDirection:"column", alignItems:"center", paddingTop:3 }}>
@@ -399,21 +463,37 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
                     {!isLast && <span style={{ width:1, flex:1, background:"rgba(255,255,255,0.12)", margin:"4px 0" }}/>}
                   </div>
                   <div style={{ flex:1, minWidth:0, paddingBottom:isLast ? 0 : 12 }}>
-                    <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
                       <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:8, fontWeight:700,
                         letterSpacing:"0.08em", color:rvp.color }}>{rvp.label}</span>
                       <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:7,
                         color:"rgba(255,255,255,0.4)", letterSpacing:"0.08em" }}>
                         {dateStr}{i === 0 ? " · FIRST IMPRESSION" : isLast ? " · NOW" : ""}
                       </span>
+                      <div style={{ flex:1 }}/>
+                      {canEditTimeline && !isEditing && (
+                        <button onClick={() => setEditingRevisit(i)}
+                          style={{ background:"none", border:"none", color:"rgba(255,255,255,0.4)",
+                            fontSize:12, cursor:"pointer", padding:"0 2px", lineHeight:1, flexShrink:0 }}>
+                          ✎
+                        </button>
+                      )}
                     </div>
-                    {r.thoughts && (
+                    {isEditing ? (
+                      <RevisitEditor
+                        initialVerdict={r.verdict}
+                        initialThoughts={r.thoughts}
+                        onSave={(verdict, thoughts) => { onEditRevisit?.(log, i, { verdict, thoughts }); setEditingRevisit(null); }}
+                        onDelete={onDeleteRevisit ? () => { onDeleteRevisit(log, i); setEditingRevisit(null); } : null}
+                        onCancel={() => setEditingRevisit(null)}
+                      />
+                    ) : r.thoughts ? (
                       <div style={{ fontFamily:"'DM Serif Display',serif", fontStyle:"italic",
                         fontSize:12.5, color:"rgba(255,255,255,0.75)", lineHeight:1.6, marginTop:4,
                         whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
                         {r.thoughts}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
@@ -484,7 +564,7 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
 };
 
 // ─── GRID FEED ────────────────────────────────────────────────────────────────
-export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, onRevisit, searchTerm = "", deepLinkNotesId, onDeepLinkConsumed, deepLinkOpenId, onDeepLinkOpenConsumed }) => {
+export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, onRevisit, onEditRevisit, onDeleteRevisit, searchTerm = "", deepLinkNotesId, onDeepLinkConsumed, deepLinkOpenId, onDeepLinkOpenConsumed }) => {
   const [selected, setSelected] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null); // src string when showing fullscreen
   const pressTimer = React.useRef(null);
@@ -734,6 +814,8 @@ export const GridFeed = ({ logs, darkMode, onEdit, onDelete, onNotesUpdate, onRe
           onDelete={(id) => { onDelete(id); setSelected(null); }}
           onNotesUpdate={onNotesUpdate}
           onRevisit={onRevisit}
+          onEditRevisit={onEditRevisit}
+          onDeleteRevisit={onDeleteRevisit}
           openNotesImmediately={!!selected._openNotes}
         />
       )}
