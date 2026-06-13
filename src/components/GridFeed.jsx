@@ -77,21 +77,27 @@ const ArtworkTile = ({ log }) => {
 // page routes to the right place (notes vs the matching revisit entry).
 const NotesSidePanel = ({ log, onClose, onNotesUpdate, onEditRevisit }) => {
   const revisits = Array.isArray(log.revisits) ? log.revisits : [];
-  const pages = [
-    { kind: "note", eyebrow: "Original note", date: "", verdict: null, text: log.notes || "" },
-    ...revisits.map((r, i) => {
-      const isFirst = i === 0;
-      const isLast = i === revisits.length - 1;
-      const date = r.date
-        ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-        : "";
-      return {
-        kind: "revisit", index: i,
-        eyebrow: isFirst ? "First impression" : isLast ? "Latest revisit" : "Revisit",
-        date, verdict: r.verdict, text: r.thoughts || "",
-      };
-    }),
-  ];
+  const fmtDate = d => d
+    ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "";
+  // The original note IS the first impression, so merge them into one page —
+  // otherwise the auto-snapshotted (empty) first revisit shows as a redundant
+  // blank page right next to the note. Editing that page edits log.notes.
+  const pages = revisits.length > 0
+    ? [
+        { kind: "note", eyebrow: "First impression", pill: "First",
+          date: fmtDate(revisits[0].date), verdict: revisits[0].verdict, text: log.notes || "" },
+        ...revisits.slice(1).map((r, k) => {
+          const i = k + 1;
+          const isLast = i === revisits.length - 1;
+          return {
+            kind: "revisit", index: i,
+            eyebrow: isLast ? "Latest revisit" : "Revisit", pill: fmtDate(r.date),
+            date: fmtDate(r.date), verdict: r.verdict, text: r.thoughts || "",
+          };
+        }),
+      ]
+    : [{ kind: "note", eyebrow: "Original note", pill: "Note", date: "", verdict: null, text: log.notes || "" }];
 
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState(false);
@@ -171,7 +177,7 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate, onEditRevisit }) => {
             {pages.map((p, i) => {
               const active = i === safePage;
               const dotColor = p.verdict ? VERDICT_PILL_STYLE(p.verdict).color : "rgba(255,255,255,0.5)";
-              const label = p.kind === "note" ? "Note" : (p.date || p.eyebrow);
+              const label = p.pill || (p.kind === "note" ? "Note" : (p.date || p.eyebrow));
               const hasText = !!p.text;
               return (
                 <button key={i} onClick={() => setPage(i)}
@@ -208,7 +214,7 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate, onEditRevisit }) => {
           />
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: "16px", WebkitOverflowScrolling: "touch" }}>
-            {cur.kind === "revisit" && cur.verdict && (
+            {cur.verdict && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 12,
                 padding: "3px 9px", borderRadius: 3,
                 border: `1px solid ${VERDICT_PILL_STYLE(cur.verdict).border}`,
