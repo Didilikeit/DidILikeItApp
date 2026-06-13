@@ -73,11 +73,42 @@ const ArtworkTile = ({ log }) => {
 
 // ─── NOTES SIDE PANEL ─────────────────────────────────────────────────────────
 // Slides in from the right, full-width, so the card behind doesn't distract.
-const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
-  const [localNotes, setLocalNotes] = useState(log.notes || "");
+// Pages through the original note plus each revisit's thoughts; editing each
+// page routes to the right place (notes vs the matching revisit entry).
+const NotesSidePanel = ({ log, onClose, onNotesUpdate, onEditRevisit }) => {
+  const revisits = Array.isArray(log.revisits) ? log.revisits : [];
+  const pages = [
+    { kind: "note", eyebrow: "Original note", date: "", verdict: null, text: log.notes || "" },
+    ...revisits.map((r, i) => {
+      const isFirst = i === 0;
+      const isLast = i === revisits.length - 1;
+      const date = r.date
+        ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "";
+      return {
+        kind: "revisit", index: i,
+        eyebrow: isFirst ? "First impression" : isLast ? "Latest revisit" : "Revisit",
+        date, verdict: r.verdict, text: r.thoughts || "",
+      };
+    }),
+  ];
+
+  const [page, setPage] = useState(0);
   const [editing, setEditing] = useState(false);
-  const handleSave = () => { onNotesUpdate?.(log.id, localNotes); setEditing(false); };
-  useEffect(() => { setLocalNotes(log.notes || ""); }, [log.notes]);
+  const [draft, setDraft] = useState("");
+
+  const safePage = Math.min(page, pages.length - 1);
+  const cur = pages[safePage];
+  const canEditCur = cur.kind === "note" ? !!onNotesUpdate : !!onEditRevisit;
+
+  // Reset the draft (and leave edit mode) when the page or its text changes
+  useEffect(() => { setDraft(cur.text); setEditing(false); }, [safePage, cur.text]);
+
+  const handleSave = () => {
+    if (cur.kind === "note") onNotesUpdate?.(log.id, draft);
+    else onEditRevisit?.(log, cur.index, { verdict: cur.verdict, thoughts: draft });
+    setEditing(false);
+  };
 
   const btn = {
     flex: 1, padding: "8px 4px", borderRadius: "6px",
@@ -86,6 +117,10 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
     fontSize: "7px", fontWeight: "700", letterSpacing: "0.1em",
     textTransform: "uppercase", cursor: "pointer", textAlign: "center",
   };
+
+  const placeholder = cur.kind === "note"
+    ? "NO NOTES YET: TAP EDIT TO ADD"
+    : "NO THOUGHTS FOR THIS REVISIT: TAP EDIT TO ADD";
 
   return (
     <>
@@ -119,7 +154,7 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
               letterSpacing: "0.2em", textTransform: "uppercase",
               color: "rgba(255,255,255,0.35)", marginBottom: "5px",
             }}>
-              MY NOTES
+              {cur.eyebrow.toUpperCase()}{cur.date ? ` · ${cur.date}` : ""}
             </div>
             <div style={{
               fontFamily: "'DM Serif Display',serif", fontSize: "17px", color: "#fff",
@@ -130,13 +165,38 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
           </div>
         </div>
 
+        {/* Pager — only when there's more than just the original note */}
+        {pages.length > 1 && (
+          <div style={{ display: "flex", gap: 6, padding: "0 16px 10px", overflowX: "auto", flexShrink: 0 }}>
+            {pages.map((p, i) => {
+              const active = i === safePage;
+              const dotColor = p.verdict ? VERDICT_PILL_STYLE(p.verdict).color : "rgba(255,255,255,0.5)";
+              const label = p.kind === "note" ? "Note" : (p.date || p.eyebrow);
+              const hasText = !!p.text;
+              return (
+                <button key={i} onClick={() => setPage(i)}
+                  style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px",
+                    borderRadius: 20,
+                    border: `1px solid ${active ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.1)"}`,
+                    background: active ? "rgba(255,255,255,0.1)" : "none",
+                    color: active ? "#fff" : "rgba(255,255,255,0.45)",
+                    fontFamily: "'Unbounded',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em",
+                    textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap", opacity: hasText || active ? 1 : 0.55 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor, flexShrink: 0 }}/>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", flexShrink: 0 }}/>
 
         {/* Body */}
         {editing ? (
           <textarea
-            value={localNotes}
-            onChange={e => setLocalNotes(e.target.value)}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
             autoFocus
             style={{
               flex: 1, width: "100%", background: "none", border: "none",
@@ -148,17 +208,28 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
           />
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: "16px", WebkitOverflowScrolling: "touch" }}>
+            {cur.kind === "revisit" && cur.verdict && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 12,
+                padding: "3px 9px", borderRadius: 3,
+                border: `1px solid ${VERDICT_PILL_STYLE(cur.verdict).border}`,
+                background: VERDICT_PILL_STYLE(cur.verdict).bg }}>
+                <span style={{ fontFamily: "'Unbounded',sans-serif", fontSize: 8, fontWeight: 700,
+                  letterSpacing: "0.08em", color: VERDICT_PILL_STYLE(cur.verdict).color }}>
+                  {VERDICT_PILL_STYLE(cur.verdict).label}
+                </span>
+              </div>
+            )}
             <div style={{
               fontFamily: "'DM Serif Display',serif", fontStyle: "italic",
               fontSize: "15px", color: "rgba(255,255,255,0.85)", lineHeight: "1.9",
               whiteSpace: "pre-wrap", wordBreak: "break-word",
             }}>
-              {log.notes
-                ? log.notes
+              {cur.text
+                ? cur.text
                 : <span style={{
                     color: "rgba(255,255,255,0.2)", fontFamily: "'Unbounded',sans-serif",
                     fontSize: "8px", letterSpacing: "0.12em",
-                  }}>NO NOTES YET: TAP EDIT TO ADD</span>
+                  }}>{placeholder}</span>
               }
             </div>
           </div>
@@ -172,15 +243,19 @@ const NotesSidePanel = ({ log, onClose, onNotesUpdate }) => {
                 style={{ ...btn, background: "rgba(255,255,255,0.12)", color: "#fff", border: "none", flex: 2 }}>
                 SAVE
               </button>
-              <button onClick={() => { setLocalNotes(log.notes || ""); setEditing(false); }} style={btn}>
+              <button onClick={() => { setDraft(cur.text); setEditing(false); }} style={btn}>
                 CANCEL
               </button>
             </div>
           ) : (
             <div style={{ display: "flex", gap: "8px" }}>
               <button onClick={onClose} style={btn}>← BACK</button>
-              <button onClick={() => setEditing(true)} style={{ ...btn, flex: 2 }}>✏ EDIT NOTES</button>
-              <button onClick={() => navigator.clipboard?.writeText(log.notes || "")} style={btn}>📋</button>
+              {canEditCur && (
+                <button onClick={() => setEditing(true)} style={{ ...btn, flex: 2 }}>
+                  ✏ EDIT {cur.kind === "note" ? "NOTES" : "REVISIT"}
+                </button>
+              )}
+              <button onClick={() => navigator.clipboard?.writeText(cur.text || "")} style={btn}>📋</button>
             </div>
           )}
         </div>
@@ -303,6 +378,7 @@ const ExpandPanel = ({ log, darkMode, onClose, onEdit, onDelete, onNotesUpdate, 
             log={log}
             onClose={() => setNotesState(null)}
             onNotesUpdate={onNotesUpdate}
+            onEditRevisit={onEditRevisit}
           />
         )}
 
